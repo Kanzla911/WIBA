@@ -29,24 +29,29 @@ Geld, Inventar und WIBA-Punkte speichert jeder Spieler für sich.
 
 ## Die Spielwelt
 
-Die Karte bildet die Region **Vöcklabruck – Attersee – Weißenbachtal** verkleinert nach (ca. 2 × 2 km Spielfläche,
-Norden ist oben auf der Minimap):
+Die Welt ist die **echte Region Vöcklabruck – Attersee – Höllengebirge im Maßstab 1:1** (ca. 24 × 30 km):
 
-- **Vöcklabruck** im Norden: Stadtplatz mit den beiden Stadttürmen, Hinterstadt mit Stadtpfarrkirche, Maria Schöndorf
-  auf der Anhöhe, Bahnhof, Stadtpark an der Vöckla, Tischlerei, Tankstelle – östlich davon die Baustelle mit den Baggern.
-- **Vöckla und Ager**: die Ager fließt vom Nordende des Attersees über Lenzing Richtung Vöcklabruck und nimmt dort die Vöckla auf.
-- **A1, B1, B151** und die Uferstraßen verbinden alles; dazu Timelkam, Lenzing, Gampern, St. Georgen, Vöcklamarkt.
-- **Attersee**: Seewalchen und Schörfling mit Schloss Kammer am Nordende, Attersee und Nußdorf am Westufer,
-  Weyregg, Steinbach und Weißenbach am Ostufer, Unterach im Süden – mit Stegen, Strandbädern und Segelbooten.
-- **Gahberg**: Serpentinenstraße von Weyregg hinauf, auf halber Höhe der Schneiderbauerhof, oben Kapelle und Sternwarte.
-- **Weißenbachtal** und **Höllengebirge** im Südosten: eingeschnittenes Tal mit Bach, Nixenfall und dem Betriebshof Nöhmer Stein & Beton.
+- **Gelände** aus einem echten Höhenmodell – vom Vöckla-Ager-Tal über den Attersee (469 m) bis zum Großen Höllkogel (1862 m).
+- **Jedes Gebäude** aus OpenStreetMap an seiner echten Stelle, mit echtem Grundriss; Höhe, Geschosse und Dachform, wo sie eingetragen sind.
+- **Straßen, Wege, Bahn, Brücken, Flüsse, Seen, Wälder, Felder** nach echten Daten.
+- **Orte, Wirtshäuser, Werkstätten, Läden, Tankstellen, Gipfel, Sehenswürdigkeiten** als Punkte in der Welt und auf der Karte.
+- Du startest am Stadtplatz Vöcklabruck. Zum Attersee sind es wie in echt rund 9 km – nimm ein Auto.
 
-Gelände, Seeumriss, Straßen und Ortslagen sind aus der topografischen Karte abgeleitet. Einzelne Gebäude innerhalb der Orte
-(z. B. die Betriebe) stehen an plausiblen, aber nicht vermessenen Stellen. Der Flugplatz im Nordwesten ist erfunden – irgendwo müssen die Jets ja starten.
+**Karte:** Die Minimap zeigt die Umgebung. `M` öffnet die große Karte: ziehen, zoomen, Klick setzt einen Wegpunkt.
+Dort siehst du Orte, Wirtshäuser, Läden, Fahrzeuge und alle Mitspieler.
 
-Rund 150 **NPCs** beleben die Orte: Sie grüßen, weichen Autos aus, laufen bei Schüssen davon und kommentieren, was du so treibst.
-**Radio Salzburg** läuft im Hintergrund (offizieller ORF-Livestream, braucht Internet; `M` = an/aus, `,` `.` = Lautstärke).
-Du startest mit **15 Bier** – `B` trinkt eins, auch am Steuer: Lenkung und Sicht werden mit jedem Promille schwammiger.
+Fassaden, Fenster und Dächer werden aus den Daten erzeugt (keine Fotos). Wirtshäuser, Werkstätten und Läden sind die echten
+Einträge aus OpenStreetMap; „Der Franz" steht erfunden in jedem größeren Ort. Gibt es im Gebiet keinen echten Flugplatz,
+legt das Spiel eine Graspiste auf dem flachsten Wiesenstreifen bei Vöcklabruck an.
+
+**NPCs** tauchen rund um Orte und Betriebe auf. **Radio Salzburg** läuft im Hintergrund (`P` = an/aus, `,` `.` = Lautstärke).
+Du startest mit **15 Bier** – `B` trinkt eins, auch am Steuer.
+
+### Karte neu bauen
+
+Die Kartendaten liegen in `public/world`. Sie werden von der GitHub-Aktion „Karte bauen (echte Daten)" erzeugt
+(Österreich-Auszug von Geofabrik, mit `osmium` zugeschnitten, plus Höhenkacheln) und ins Repository geschrieben.
+Daten: © OpenStreetMap-Mitwirkende (ODbL); Höhen: Terrarium/Mapzen.
 
 ## Was man tun kann
 
@@ -76,7 +81,8 @@ Du startest mit **15 Bier** – `B` trinkt eins, auch am Steuer: Lenkung und Sic
 | `R` | nachladen · Bauteil drehen |
 | `E` | einsteigen / aussteigen / Laden öffnen |
 | `I` · `Tab` · `Enter` | Inventar · Rangliste · Chat |
-| `B` · `M` | Bier trinken · Radio an/aus |
+| `M` | große Karte (Klick = Wegpunkt) |
+| `B` · `P` | Bier trinken · Radio an/aus |
 
 | Bagger | |
 |---|---|
