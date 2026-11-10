@@ -76,7 +76,7 @@ export const SHOPS = {
 
 export const VEH = {
   bagger: { name: 'Bagger', radius: 3.2, cy: 1.6, maxHp: 400 },
-  auto: { name: 'Pritschenwagen', radius: 2.5, cy: 0.9, maxHp: 200 },
+  auto: { name: 'Auto', radius: 2.5, cy: 0.9, maxHp: 200 },
   flieger: {
     name: 'Propellerflieger', radius: 4.0, cy: 1.3, maxHp: 150,
     max: 58, stall: 17, takeoff: 23, accel: 10, pitch: 1.1, roll: 2.0, yaw: 0.6, cam: 15,

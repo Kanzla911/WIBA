@@ -618,7 +618,7 @@ function buildClouds() {
     sceneRef.add(g); clouds.push(g);
   }
 }
-export function initWorld(scene, lowGfx) {
+export function initWorld(scene, lowGfx, renderer) {
   sceneRef = scene;
   if (lowGfx) { RB = 3; RT = 2; RN = 0; }
   hemi = new THREE.HemisphereLight(0xcfe4ff, 0x7d7458, 1.0);
@@ -679,6 +679,20 @@ export function initWorld(scene, lowGfx) {
   sky.scale.setScalar(7); stars.scale.setScalar(7); sunDisc.scale.setScalar(7);
   for (const g of lakeGeometries()) { const m = new THREE.Mesh(g, water.material); m.frustumCulled = false; m.renderOrder = 2; scene.add(m); }
   buildClouds(); initPois(); buildAirfield();
+  // Umgebungslicht/Spiegelungen fuer PBR-Materialien aus dem Himmel
+  if (renderer) {
+    try {
+      const es = new THREE.Scene();
+      const em = sky.material.clone();
+      em.uniforms.top.value.set(0x2f7fe0); em.uniforms.bottom.value.set(0xb9defa); em.uniforms.sunDir.value.set(0.5, 0.7, 0.3).normalize(); em.uniforms.sunCol.value.set(1, 0.95, 0.85);
+      es.add(new THREE.Mesh(new THREE.SphereGeometry(50, 24, 12), em));
+      const gr = new THREE.Mesh(new THREE.SphereGeometry(49, 24, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x4a5a3a, side: THREE.BackSide })); es.add(gr);
+      const pm = new THREE.PMREMGenerator(renderer);
+      scene.environment = pm.fromScene(es, 0.02, 0.1, 200).texture;
+      scene.environmentIntensity = 0.8;
+      pm.dispose();
+    } catch (e) { /* ohne Spiegelungen */ }
+  }
 }
 
 let skyT = 0;
@@ -719,5 +733,6 @@ export function updateSky(dayT, dt, center, scene) {
     if (c.position.z - center.z > 12000) c.position.z -= 24000; else if (c.position.z - center.z < -12000) c.position.z += 24000;
   }
   wallMat.emissiveIntensity = nightGlow * 0.9;
+  scene.environmentIntensity = 0.08 + 0.75 * day;
   return day;
 }

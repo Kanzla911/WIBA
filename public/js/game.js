@@ -12,6 +12,11 @@ import * as V from './vehicles.js';
 import { initNpcs, updateNpcs } from './npc.js';
 import { radio } from './radio.js';
 import * as P2P from './p2p.js';
+import { EffectComposer } from '../vendor/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from '../vendor/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from '../vendor/jsm/postprocessing/UnrealBloomPass.js';
+import { GTAOPass } from '../vendor/jsm/postprocessing/GTAOPass.js';
+import { OutputPass } from '../vendor/jsm/postprocessing/OutputPass.js';
 
 const $ = (id) => document.getElementById(id);
 const me = G.me;
@@ -33,8 +38,29 @@ const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerH
 camera.rotation.order = 'YXZ';
 scene.add(camera);
 G.scene = scene; G.camera = camera; G.renderer = renderer; G.canvas = canvas;
+// Nachbearbeitung (nur hohe Grafik): Umgebungsverdeckung + Leuchten
+let composer = null, aoPass = null;
+let gfxAO = true;
+try { gfxAO = localStorage.getItem('wiba-ao') !== 'off'; } catch (e) { /* */ }
+function initPost() {
+  if (lowGfx || composer) return;
+  try {
+    const pr = renderer.getPixelRatio(), w = window.innerWidth, h = window.innerHeight;
+    composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(w * pr, h * pr, { type: THREE.HalfFloatType, samples: 4 }));
+    composer.addPass(new RenderPass(scene, camera));
+    if (gfxAO) {
+      aoPass = new GTAOPass(scene, camera, w, h);
+      aoPass.blendIntensity = 0.85;
+      aoPass.updateGtaoMaterial({ radius: 1.6, distanceExponent: 1.6, thickness: 1.4, scale: 1.1, samples: 12, distanceFallOff: 1, screenSpaceRadius: false });
+      composer.addPass(aoPass);
+    }
+    composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.2, 0.55, 0.94));
+    composer.addPass(new OutputPass());
+  } catch (e) { composer = null; console.warn('Nachbearbeitung nicht verfügbar', e); }
+}
 window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
+  if (composer) composer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
 });
 
@@ -249,7 +275,8 @@ net.on('welcome', (m) => {
   G.serverTimeOffset = m.time - performance.now() / 1000;
   applyAirfield(m.air || null);
   initTerrain(scene, lowGfx);
-  initWorld(scene, lowGfx);
+  initWorld(scene, lowGfx, renderer);
+  initPost();
   applyEdits(m.digs);
   for (const s of m.structs) C.addStruct(s);
   for (const v of m.vehicles) V.addVehicle(v);
@@ -839,7 +866,7 @@ function frame(now) {
       y: +me.yaw.toFixed(3), x: +me.pitch.toFixed(3), a, w: me.vehicle ? '' : (me.held || ''),
     });
   }
-  if (!G.noRender) renderer.render(scene, camera);
+  if (!G.noRender) { if (composer) composer.render(dt); else renderer.render(scene, camera); }
   G.mouse.dx = 0; G.mouse.dy = 0; G.mouse.lp = false; G.mouse.rp = false; G.mouse.wheel = 0;
   G.pressed = {};
 }

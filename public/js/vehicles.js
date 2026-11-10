@@ -242,7 +242,7 @@ function simGround(v, dt) {
       for (const p of G.players.values()) {
         if (p.dead || p.v) continue;
         if (Math.hypot(p.pos.x - v.pos.x - sx * 1.5 * dir, p.pos.z - v.pos.z - cz * 1.5 * dir) < 2.0 && Math.abs(p.pos.y - v.pos.y) < 2) {
-          net.send({ t: 'hit', to: p.id, d: Math.round(Math.abs(v.speed) * 3.2), w: 'Pritschenwagen' });
+          net.send({ t: 'hit', to: p.id, d: Math.round(Math.abs(v.speed) * 3.2), w: 'Auto' });
           v.hitCd = 0.8; sfx.hit();
         }
       }

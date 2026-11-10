@@ -93,43 +93,94 @@ export function makeItem(id) {
   return g;
 }
 
-// ---------- Spielfigur (Bauarbeiter, schaut nach +Z, Ursprung an den Fuessen) ----------
+// ---------- Materialien (PBR) ----------
+const stdCache = new Map();
+export function std(color, rough = 0.8, metal = 0, extra) {
+  const key = color + '|' + rough + '|' + metal + (extra ? JSON.stringify(extra) : '');
+  let m = stdCache.get(key);
+  if (!m) { m = new THREE.MeshStandardMaterial(Object.assign({ color, roughness: rough, metalness: metal }, extra || {})); stdCache.set(key, m); }
+  return m;
+}
+function part(geo, mat, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1) {
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.castShadow = true; m.receiveShadow = true;
+  return m;
+}
+let AG = null;
+function avatarGeo() {
+  if (AG) return AG;
+  const V2 = (r, y) => new THREE.Vector2(r, y);
+  AG = {
+    sphere: new THREE.SphereGeometry(1, 20, 14),
+    thigh: new THREE.CapsuleGeometry(0.078, 0.34, 6, 14), shin: new THREE.CapsuleGeometry(0.058, 0.34, 6, 14),
+    uarm: new THREE.CapsuleGeometry(0.046, 0.22, 6, 12), farm: new THREE.CapsuleGeometry(0.037, 0.22, 6, 12),
+    torso: new THREE.LatheGeometry([V2(0.001, 0.9), V2(0.15, 0.92), V2(0.158, 1.0), V2(0.148, 1.1), V2(0.168, 1.24), V2(0.192, 1.36), V2(0.18, 1.44), V2(0.09, 1.5), V2(0.05, 1.53), V2(0.001, 1.54)], 20),
+    hips: new THREE.LatheGeometry([V2(0.001, 0.8), V2(0.13, 0.82), V2(0.162, 0.9), V2(0.163, 0.99), V2(0.152, 1.04), V2(0.001, 1.05)], 20),
+    neck: new THREE.CylinderGeometry(0.048, 0.055, 0.12, 12),
+    hair: new THREE.SphereGeometry(1, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.56),
+    helm: new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2),
+    brim: new THREE.CylinderGeometry(0.148, 0.152, 0.014, 20),
+    band: new THREE.CylinderGeometry(1, 1, 0.04, 20, 1, true),
+    canopy: new THREE.SphereGeometry(2.6, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+  };
+  return AG;
+}
+const SKINS = [0xe8b998, 0xd9a47f, 0xf0c8a8, 0xc68e6a];
+
+// ---------- Spielfigur (schaut nach +Z, Ursprung an den Fuessen, ca. 1,80 m) ----------
 export function makeAvatar(color, look) {
-  const SH = look ? look.shirt : 0xff7a1a, PA = look ? look.pants : 0x2d3e5c;
+  const A = avatarGeo();
+  const worker = !look;
+  const SH = worker ? 0xf26a12 : look.shirt, PA = worker ? 0x2d3e5c : look.pants;
+  const skin = std(SKINS[(color + (look ? look.shirt : 0)) % SKINS.length], 0.62);
+  const shirt = std(SH, 0.9), pants = std(PA, 0.92), shoe = std(0x2a2019, 0.7), dark = std(0x1c1a18, 0.5);
   const group = new THREE.Group();
   const body = new THREE.Group(); group.add(body);
-  const mkLimb = (x, y, len, w, c, footC) => {
-    const piv = new THREE.Group(); piv.position.set(x, y, 0);
-    piv.add(mkBox(w, len, w + 0.02, c, 0, -len / 2, 0));
-    if (footC !== undefined) piv.add(mkBox(w + 0.02, 0.12, w + 0.14, footC, 0, -len + 0.06, 0.05));
-    body.add(piv);
-    return piv;
+  const leg = (x) => {
+    const p = new THREE.Group(); p.position.set(x, 0.93, 0);
+    p.add(part(A.thigh, pants, 0, -0.24, 0)); p.add(part(A.shin, pants, 0, -0.65, 0));
+    p.add(part(A.sphere, shoe, 0, -0.89, 0.045, 0.062, 0.05, 0.135));
+    body.add(p); return p;
   };
-  const legL = mkLimb(0.17, 0.85, 0.85, 0.26, PA, 0x3a2a1e);
-  const legR = mkLimb(-0.17, 0.85, 0.85, 0.26, PA, 0x3a2a1e);
-  body.add(mkBox(0.66, 0.66, 0.36, SH, 0, 1.18, 0));
-  if (!look) { body.add(mkBox(0.68, 0.07, 0.38, 0xfff27a, 0, 1.08, 0)); body.add(mkBox(0.68, 0.07, 0.38, 0xfff27a, 0, 1.3, 0)); }
-  const armL = mkLimb(0.44, 1.46, 0.68, 0.19, SH);
-  const armR = mkLimb(-0.44, 1.46, 0.68, 0.19, SH);
-  armL.add(mkBox(0.17, 0.14, 0.17, 0xf0c39a, 0, -0.7, 0));
-  armR.add(mkBox(0.17, 0.14, 0.17, 0xf0c39a, 0, -0.7, 0));
-  const head = new THREE.Group(); head.position.set(0, 1.5, 0); body.add(head);
-  const skull = new THREE.Mesh(new THREE.IcosahedronGeometry(0.29, 1), lam(0xf0c39a));
-  skull.position.y = 0.27; skull.castShadow = true; head.add(skull);
-  head.add(mkBox(0.06, 0.08, 0.04, 0x222222, 0.1, 0.31, 0.27));
-  head.add(mkBox(0.06, 0.08, 0.04, 0x222222, -0.1, 0.31, 0.27));
-  head.add(mkBox(0.16, 0.03, 0.04, 0x7a3b2a, 0, 0.17, 0.27));
-  const helm = new THREE.Mesh(new THREE.SphereGeometry(look ? 0.305 : 0.32, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), lam(look ? look.hair : color));
-  helm.position.y = look ? 0.3 : 0.33; helm.castShadow = true; head.add(helm);
-  if (!look) head.add(mkBox(0.5, 0.04, 0.3, color, 0, 0.35, 0.2));
-  const hand = new THREE.Group(); hand.position.set(0, -0.72, 0.08); hand.rotation.x = -Math.PI / 2; hand.rotation.z = Math.PI;
+  const legL = leg(0.092), legR = leg(-0.092);
+  body.add(part(A.hips, pants, 0, 0, 0, 1, 1, 0.7));
+  body.add(part(A.torso, shirt, 0, 0, 0, 1, 1, 0.66));
+  if (worker) for (const y of [1.1, 1.3]) body.add(part(A.band, std(0xf6ee6a, 0.5, 0, { emissive: 0x554a00 }), 0, y, 0, y > 1.2 ? 0.19 : 0.158, 1, y > 1.2 ? 0.127 : 0.105));
+  body.add(part(A.neck, skin, 0, 1.56, 0));
+  const arm = (x) => {
+    const p = new THREE.Group(); p.position.set(x, 1.43, 0);
+    p.add(part(A.sphere, shirt, 0, 0, 0, 0.058, 0.058, 0.058));
+    p.add(part(A.uarm, shirt, 0, -0.16, 0)); p.add(part(A.farm, worker ? shirt : skin, 0, -0.42, 0));
+    p.add(part(A.sphere, skin, 0, -0.6, 0.005, 0.038, 0.055, 0.03));
+    body.add(p); return p;
+  };
+  const armL = arm(0.225), armR = arm(-0.225);
+  const head = new THREE.Group(); head.position.set(0, 1.6, 0); body.add(head);
+  head.add(part(A.sphere, skin, 0, 0.115, 0, 0.097, 0.118, 0.106));
+  head.add(part(A.sphere, skin, 0, 0.055, 0.018, 0.078, 0.075, 0.085));
+  head.add(part(A.sphere, skin, 0, 0.1, 0.104, 0.016, 0.022, 0.02));
+  for (const s of [-1, 1]) {
+    head.add(part(A.sphere, std(0xf4f4f0, 0.3), s * 0.036, 0.132, 0.088, 0.017, 0.012, 0.012));
+    head.add(part(A.sphere, dark, s * 0.036, 0.132, 0.098, 0.0075, 0.0085, 0.006));
+    head.add(part(A.sphere, skin, s * 0.097, 0.115, 0, 0.012, 0.026, 0.018));
+    const brow = part(A.sphere, std(look ? look.hair : 0x3a2a1e, 0.9), s * 0.037, 0.158, 0.093, 0.022, 0.005, 0.008); head.add(brow);
+  }
+  head.add(part(A.sphere, std(0x9c4a40, 0.6), 0, 0.058, 0.094, 0.026, 0.006, 0.01));
+  if (worker) {
+    const hm = std(color, 0.35, 0.05);
+    head.add(part(A.helm, hm, 0, 0.14, 0, 0.122, 0.118, 0.132));
+    head.add(part(A.brim, hm, 0, 0.142, 0.028, 1, 1, 1.12));
+  } else {
+    const h = part(A.hair, std(look.hair, 0.95), 0, 0.125, -0.008, 0.103, 0.118, 0.114); h.rotation.x = -0.32; head.add(h);
+  }
+  const hand = new THREE.Group(); hand.position.set(0, -0.62, 0.05); hand.rotation.x = -Math.PI / 2; hand.rotation.z = Math.PI;
   armR.add(hand);
   // Fallschirm
   const chute = new THREE.Group();
-  const canopy = new THREE.Mesh(new THREE.SphereGeometry(2.6, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), lam(0xff4466, { side: THREE.DoubleSide }));
+  const canopy = new THREE.Mesh(A.canopy, std(0xe8334f, 0.8, 0, { side: THREE.DoubleSide }));
   canopy.position.y = 4.2; chute.add(canopy);
   for (const [x, z] of [[1.8, 1.8], [-1.8, 1.8], [1.8, -1.8], [-1.8, -1.8]]) {
-    const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 1.6, 0), new THREE.Vector3(x, 4.3, z)]);
+    const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 1.5, 0), new THREE.Vector3(x, 4.3, z)]);
     chute.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x333333 })));
   }
   chute.visible = false; group.add(chute);
@@ -188,75 +239,100 @@ export function poseBaggerArm(parts, r, ty) {
   parts.bucket.rotation.x = th2 + 0.9;
 }
 
-// ---------- Pritschenwagen ----------
+// ---------- Hilfen fuer runde Formen ----------
+function extrudeSide(pts, width, bevel, mat) {
+  const sh = new THREE.Shape();
+  pts.forEach((p, i) => (i ? sh.lineTo(p[0], p[1]) : sh.moveTo(p[0], p[1])));
+  sh.closePath();
+  const g = new THREE.ExtrudeGeometry(sh, { depth: width - bevel * 2, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 3, curveSegments: 8 });
+  g.rotateY(-Math.PI / 2); g.translate((width - bevel * 2) / 2, 0, 0);
+  const m = new THREE.Mesh(g, mat); m.castShadow = true; m.receiveShadow = true;
+  return m;
+}
+function lathe(profile, mat, seg = 24) { // profile: [z, r] entlang der Laengsachse
+  const g = new THREE.LatheGeometry(profile.map((p) => new THREE.Vector2(Math.max(0.001, p[1]), p[0])), seg);
+  g.rotateX(Math.PI / 2);
+  const m = new THREE.Mesh(g, mat); m.castShadow = true; m.receiveShadow = true;
+  return m;
+}
+function wheel(r, w, x, y, z) {
+  const g = new THREE.Group();
+  const t = new THREE.Mesh(new THREE.CylinderGeometry(r, r, w, 28), std(0x151515, 0.95)); t.rotation.z = Math.PI / 2; t.castShadow = true; g.add(t);
+  const rim = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.62, r * 0.62, w + 0.02, 20), std(0xb9bcc2, 0.3, 0.9)); rim.rotation.z = Math.PI / 2; g.add(rim);
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.2, r * 0.2, w + 0.05, 12), std(0x30323a, 0.4, 0.8)); hub.rotation.z = Math.PI / 2; g.add(hub);
+  g.position.set(x, y, z);
+  return g;
+}
+const GLASS = () => std(0x0c1820, 0.06, 0.9);
+
+// ---------- Auto (Kombi) ----------
+const CAR_COLORS = [0xb3261e, 0x1f3f8a, 0xe9e9ea, 0x2b2d31, 0x8a8f96, 0x1f6b3a, 0xd6a11b];
+let carN = 0;
 export function makeAuto() {
   const group = new THREE.Group();
-  group.add(mkBox(1.9, 0.6, 4.4, 0xc8452f, 0, 0.75, 0));
-  group.add(mkBox(1.8, 0.8, 1.5, 0xc8452f, 0, 1.45, 0.5));
-  group.add(mkBox(1.7, 0.55, 1.52, 0x9fd8ff, 0, 1.5, 0.5, { transparent: true, opacity: 0.75 }));
-  group.add(mkBox(1.9, 0.4, 0.1, 0x8a2f1f, 0, 1.2, -2.15));
-  group.add(mkBox(0.1, 0.4, 1.9, 0x8a2f1f, 0.9, 1.2, -1.2));
-  group.add(mkBox(0.1, 0.4, 1.9, 0x8a2f1f, -0.9, 1.2, -1.2));
-  group.add(mkBox(1.6, 0.25, 0.2, 0xdddddd, 0, 0.6, 2.25));
-  group.add(mkBox(0.3, 0.18, 0.1, 0xfff6a0, 0.65, 0.9, 2.21, { emissive: 0x554400 }));
-  group.add(mkBox(0.3, 0.18, 0.1, 0xfff6a0, -0.65, 0.9, 2.21, { emissive: 0x554400 }));
-  const wheels = [];
-  for (const [x, z] of [[1, 1.4], [-1, 1.4], [1, -1.4], [-1, -1.4]]) {
-    const w = cyl(0.42, 0.42, 0.3, 8, 0x1c1c1c, x, 0.42, z); w.rotation.z = Math.PI / 2;
-    group.add(w); wheels.push(w);
+  const paint = std(CAR_COLORS[carN++ % CAR_COLORS.length], 0.32, 0.55);
+  group.add(extrudeSide([[-2.12, 0.34], [-2.2, 0.62], [-2.16, 0.92], [-1.98, 1.04], [-1.62, 1.44], [-1.3, 1.5], [0.15, 1.5], [0.42, 1.44], [1.02, 1.03], [1.9, 0.94], [2.14, 0.84], [2.2, 0.6], [2.16, 0.34]], 1.78, 0.09, paint));
+  group.add(extrudeSide([[-1.86, 1.07], [-1.56, 1.4], [-1.3, 1.45], [0.12, 1.45], [0.36, 1.4], [0.9, 1.06]], 1.81, 0, GLASS()));
+  const trim = std(0x18191c, 0.6, 0.2);
+  group.add(part(new THREE.BoxGeometry(1.8, 0.2, 0.16), trim, 0, 0.42, 2.14)); group.add(part(new THREE.BoxGeometry(1.8, 0.2, 0.16), trim, 0, 0.42, -2.14));
+  group.add(part(new THREE.BoxGeometry(1.84, 0.1, 3.0), trim, 0, 0.3, 0));
+  for (const s of [-1, 1]) {
+    group.add(part(new THREE.BoxGeometry(0.42, 0.14, 0.08), std(0xfff8e0, 0.2, 0.1, { emissive: 0xfff0c0, emissiveIntensity: 0.9 }), s * 0.62, 0.76, 2.17));
+    group.add(part(new THREE.BoxGeometry(0.36, 0.12, 0.08), std(0xc01818, 0.3, 0.1, { emissive: 0x900808, emissiveIntensity: 0.8 }), s * 0.66, 0.84, -2.18));
+    group.add(part(new THREE.BoxGeometry(0.1, 0.09, 0.16), paint, s * 0.98, 1.08, 0.82));
   }
+  group.add(part(new THREE.BoxGeometry(0.9, 0.16, 0.05), std(0x202226, 0.5, 0.4), 0, 0.62, 2.2));
+  const wheels = [];
+  for (const [x, z] of [[0.82, 1.36], [-0.82, 1.36], [0.82, -1.34], [-0.82, -1.34]]) { const w = wheel(0.34, 0.24, x, 0.34, z); group.add(w); wheels.push(w); }
   return { group, wheels };
 }
 
 // ---------- Propellerflieger ----------
 export function makeFlieger() {
   const group = new THREE.Group();
-  const b = new THREE.Group(); b.position.y = 1.1; group.add(b);
-  b.add(mkBox(1.15, 1.2, 4.2, 0xf4f4f4, 0, 0, 0.4));
-  b.add(mkBox(0.8, 0.8, 2.8, 0xf4f4f4, 0, 0.1, -2.9));
-  b.add(mkBox(1.17, 0.3, 4.22, 0xd0322a, 0, -0.2, 0.4));
-  b.add(mkBox(1.0, 0.55, 1.3, 0x9fd8ff, 0, 0.55, 0.9, { transparent: true, opacity: 0.75 }));
-  b.add(mkBox(11, 0.16, 1.7, 0xd0322a, 0, 0.72, 0.7));
-  b.add(mkBox(3.6, 0.12, 1.0, 0xd0322a, 0, 0.3, -4.0));
-  b.add(mkBox(0.14, 1.5, 1.1, 0xd0322a, 0, 0.9, -4.0));
-  b.add(mkBox(0.9, 0.9, 0.5, 0x333333, 0, 0, 2.7));
-  const prop = new THREE.Group(); prop.position.set(0, 0, 3.05); b.add(prop);
-  prop.add(mkBox(2.6, 0.22, 0.06, 0x222222)); prop.add(mkBox(0.22, 2.6, 0.06, 0x222222));
-  for (const x of [-0.9, 0.9]) {
-    group.add(mkBox(0.1, 0.7, 0.1, 0x555555, x, 0.45, 1.0));
-    const w = cyl(0.3, 0.3, 0.2, 8, 0x1c1c1c, x, 0.3, 1.0); w.rotation.z = Math.PI / 2; group.add(w);
+  const b = new THREE.Group(); b.position.y = 1.25; group.add(b);
+  const white = std(0xf2f3f5, 0.35, 0.3), red = std(0xc22a22, 0.35, 0.35);
+  const fus = lathe([[-4.4, 0.05], [-4.0, 0.16], [-2.4, 0.32], [-0.9, 0.56], [0.6, 0.64], [1.9, 0.6], [2.7, 0.46], [3.0, 0.3], [3.12, 0.05]], white); fus.scale.set(0.92, 1.0, 1); b.add(fus);
+  const cab = part(avatarGeo().sphere, GLASS(), 0, 0.42, 0.75, 0.5, 0.42, 1.15); b.add(cab);
+  const wing = extrudeSide([[-0.75, 0], [-0.55, 0.09], [0.35, 0.11], [0.8, 0.03], [0.75, -0.04], [-0.7, -0.03]], 11, 0.04, red); wing.position.set(0, 0.74, 0.75); b.add(wing);
+  const stab = extrudeSide([[-0.45, 0], [-0.3, 0.05], [0.3, 0.06], [0.5, 0.01], [-0.4, -0.02]], 3.7, 0.03, red); stab.position.set(0, 0.22, -3.95); b.add(stab);
+  const fin = extrudeSide([[-0.6, 0], [-0.75, 1.35], [-0.25, 1.4], [0.75, 0]], 0.12, 0.03, red); fin.position.set(0, 0.2, -3.85); b.add(fin);
+  for (const s of [-1, 1]) { const st = part(new THREE.CylinderGeometry(0.035, 0.035, 2.3, 8), std(0x9aa0a8, 0.4, 0.7), s * 1.25, 0.18, 0.75); st.rotation.z = s * 1.02; b.add(st); }
+  b.add(part(new THREE.ConeGeometry(0.22, 0.5, 16), std(0x2a2c30, 0.4, 0.6), 0, 0, 3.3).rotateX(Math.PI / 2));
+  const prop = new THREE.Group(); prop.position.set(0, 0, 3.22); b.add(prop);
+  for (const a of [0, Math.PI / 2]) { const bl = part(new THREE.BoxGeometry(2.7, 0.16, 0.035), std(0x1a1a1c, 0.5, 0.3)); bl.rotation.z = a; prop.add(bl); }
+  for (const x of [-1.05, 1.05]) {
+    const lg = part(new THREE.CylinderGeometry(0.04, 0.04, 0.95, 8), std(0x9aa0a8, 0.4, 0.7), x * 0.8, 0.62, 1.0); lg.rotation.z = x > 0 ? -0.5 : 0.5; group.add(lg);
+    group.add(wheel(0.24, 0.16, x, 0.24, 1.0));
   }
-  const tw = cyl(0.16, 0.16, 0.12, 6, 0x1c1c1c, 0, 0.16, -3.9); tw.rotation.z = Math.PI / 2; group.add(tw);
+  group.add(wheel(0.13, 0.1, 0, 0.13, -3.7));
   return { group, prop };
 }
 
 // ---------- Kampfjet ----------
 export function makeJet() {
   const group = new THREE.Group();
-  const b = new THREE.Group(); b.position.y = 1.3; group.add(b);
-  const G1 = 0x7d8a96, G2 = 0x5b6772;
-  b.add(mkBox(1.3, 1.1, 8.5, G1, 0, 0, -0.5));
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.78, 3.4, 4), lam(G2));
-  nose.rotation.x = Math.PI / 2; nose.rotation.y = Math.PI / 4; nose.position.z = 5.4; nose.castShadow = true; b.add(nose);
-  const can = new THREE.Mesh(new THREE.SphereGeometry(0.62, 8, 5), lam(0x1f3550, { transparent: true, opacity: 0.85 }));
-  can.scale.set(0.9, 0.8, 2.3); can.position.set(0, 0.55, 2.2); b.add(can);
-  const wingShape = new THREE.Shape();
-  wingShape.moveTo(0.6, 1.6); wingShape.lineTo(4.9, -3.2); wingShape.lineTo(4.9, -4.0); wingShape.lineTo(0.6, -4.0); wingShape.closePath();
-  const wgeo = new THREE.ExtrudeGeometry(wingShape, { depth: 0.14, bevelEnabled: false });
-  wgeo.rotateX(Math.PI / 2); // Shape-XY -> XZ (y der Shape wird z)
+  const b = new THREE.Group(); b.position.y = 1.45; group.add(b);
+  const g1 = std(0x77828d, 0.45, 0.6), g2 = std(0x59636e, 0.5, 0.6);
+  const fus = lathe([[-5.3, 0.42], [-5.0, 0.56], [-3.5, 0.72], [-0.5, 0.78], [2.0, 0.7], [3.8, 0.5], [5.4, 0.22], [6.4, 0.02]], g1, 28); fus.scale.set(1.05, 0.82, 1); b.add(fus);
+  b.add(part(avatarGeo().sphere, GLASS(), 0, 0.42, 2.6, 0.42, 0.42, 1.5));
+  const wingPts = [[-4.0, 0.62], [-4.0, 4.9], [-3.2, 4.9], [1.7, 0.62]];
   for (const s of [1, -1]) {
-    const w = new THREE.Mesh(wgeo, lam(G1, { side: THREE.DoubleSide }));
-    w.scale.x = s; w.position.y = -0.05; w.castShadow = true; b.add(w);
-    const fin = mkBox(0.12, 1.7, 1.8, G2, s * 0.55, 1.1, -3.9); fin.rotation.z = -s * 0.25; b.add(fin);
-    b.add(mkBox(1.9, 0.1, 1.3, G2, s * 1.5, 0.0, -4.4));
-    b.add(mkBox(0.2, 0.2, 2.2, 0xe8e8e8, s * 3.2, -0.25, -2.2));
+    const sh = new THREE.Shape(); wingPts.forEach((p, i) => (i ? sh.lineTo(p[1] * s, p[0]) : sh.moveTo(p[1] * s, p[0]))); sh.closePath();
+    const wg = new THREE.ExtrudeGeometry(sh, { depth: 0.1, bevelEnabled: true, bevelThickness: 0.035, bevelSize: 0.05, bevelSegments: 2 });
+    wg.rotateX(Math.PI / 2);
+    const w = new THREE.Mesh(wg, std(0x77828d, 0.45, 0.6, { side: THREE.DoubleSide })); w.position.y = -0.02; w.castShadow = true; b.add(w);
+    const fin = extrudeSide([[-0.9, 0], [-1.3, 1.75], [-0.75, 1.8], [0.9, 0]], 0.1, 0.03, g2); fin.position.set(s * 0.58, 0.45, -3.9); fin.rotation.z = -s * 0.3; b.add(fin);
+    const tail = extrudeSide([[-0.75, 0], [-0.6, 0.04], [0.65, 0.04], [0.8, 0], [-0.7, -0.03]], 2.0, 0.03, g2); tail.position.set(s * 1.55, -0.02, -4.5); b.add(tail);
+    const intake = lathe([[-1.0, 0.3], [1.0, 0.3], [1.3, 0.24]], g2, 14); intake.position.set(s * 0.82, -0.2, 0.9); intake.scale.set(1, 0.8, 1); b.add(intake);
+    const msl = lathe([[-1.1, 0.07], [0.9, 0.07], [1.25, 0.01]], std(0xe6e7ea, 0.4, 0.4), 10); msl.position.set(s * 3.3, -0.22, -2.3); b.add(msl);
   }
-  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.42, 2.6, 6), new THREE.MeshBasicMaterial({ color: 0xffa233, transparent: true, opacity: 0.85 }));
-  flame.rotation.x = -Math.PI / 2; flame.position.z = -6.0; b.add(flame);
-  b.add(mkBox(1.0, 0.9, 0.4, 0x222222, 0, 0, -4.8));
-  for (const [x, z] of [[-1.1, -1.2], [1.1, -1.2], [0, 3.0]]) {
-    group.add(mkBox(0.1, 0.8, 0.1, 0x555555, x, 0.5, z));
-    const w = cyl(0.26, 0.26, 0.18, 8, 0x1c1c1c, x, 0.26, z); w.rotation.z = Math.PI / 2; group.add(w);
+  b.add(lathe([[-5.75, 0.36], [-5.3, 0.44]], std(0x202124, 0.5, 0.8, { side: THREE.DoubleSide }), 20));
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.36, 2.8, 14), new THREE.MeshBasicMaterial({ color: 0xffb040, transparent: true, opacity: 0.85 }));
+  flame.rotation.x = -Math.PI / 2; flame.position.z = -6.9; b.add(flame);
+  for (const [x, z] of [[-1.15, -1.3], [1.15, -1.3], [0, 3.2]]) {
+    group.add(part(new THREE.CylinderGeometry(0.045, 0.045, 0.95, 8), std(0xa0a6ae, 0.4, 0.8), x, 0.6, z));
+    group.add(wheel(0.25, 0.16, x, 0.25, z));
   }
   return { group, flame };
 }
