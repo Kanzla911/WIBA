@@ -79,6 +79,13 @@ camera.add(vm);
 let vmItem = null, vmId = null;
 const vmCloth = mkBox(0.1, 0.025, 0.1, 0xf4f4f4, -0.02, 0.06, -0.05);
 vmCloth.visible = false; vmCloth.castShadow = false; vm.add(vmCloth);
+// Unterarm und Hand in der Ich-Ansicht
+const vmArm = new THREE.Group();
+{ const sleeve = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.34, 6, 12), new THREE.MeshStandardMaterial({ color: 0xf26a12, roughness: 0.9 }));
+  sleeve.rotation.x = Math.PI / 2 - 0.25; sleeve.position.set(0.06, -0.1, 0.3);
+  const hnd = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), new THREE.MeshStandardMaterial({ color: 0xe8b998, roughness: 0.62 }));
+  hnd.scale.set(0.05, 0.045, 0.07); hnd.position.set(0.035, -0.045, 0.06);
+  vmArm.add(sleeve); vmArm.add(hnd); vm.add(vmArm); }
 function setViewItem(id) {
   if (id === vmId) return;
   vmId = id;

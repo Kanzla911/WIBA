@@ -618,6 +618,7 @@ export function updateGrass(cx, cz, agl, ready) {
   if (!ready || Math.hypot(cx - grassX, cz - grassZ) < 9) return;
   grassX = cx; grassZ = cz;
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
+  const af = M.air, ax0 = af ? Math.min(af.x0, af.x1) - 4 : 0, ax1 = af ? Math.max(af.x0, af.x1) + 4 : 0, az0 = af ? Math.min(af.z0, af.z1) - af.w / 2 - 1 : 0, az1 = af ? Math.max(af.z0, af.z1) + af.w / 2 + 1 : 0;
   let n = 0;
   const i0 = Math.floor((cx - GRASS_R) / GRASS_STEP), i1 = Math.floor((cx + GRASS_R) / GRASS_STEP), j0 = Math.floor((cz - GRASS_R) / GRASS_STEP), j1 = Math.floor((cz + GRASS_R) / GRASS_STEP);
   for (let j = j0; j <= j1 && n < GRASS_N; j++) for (let i = i0; i <= i1 && n < GRASS_N; i++) {
@@ -628,6 +629,7 @@ export function updateGrass(cx, cz, agl, ready) {
     const lu = landuseAt(x, z);
     if (lu === 4 || lu === 5 || lu === 6 || lu === 7 || (lu === 2 && h1 > 0.5) || (lu === 1 && h1 > 0.45)) continue;
     if (nearRoad(x, z) || polyAt(x, z, 0.6)) continue;
+    if (af && x > ax0 && x < ax1 && z > az0 && z < az1) continue;
     const y = getHeight(x, z);
     if (y + M.meta.yoff > 1650) continue;
     const sc = (lu === 2 ? 1.2 : 0.55) + h1 * 0.6;

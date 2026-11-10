@@ -11,81 +11,95 @@ function cyl(rt, rb, h, seg, color, x = 0, y = 0, z = 0, opts) {
 // ---------- Gegenstaende (zeigen nach -Z) ----------
 export function makeItem(id) {
   const g = new THREE.Group();
+  const steel = std(0x1f2124, 0.38, 0.85), wood = std(0x6b4526, 0.75), poly = std(0x16171a, 0.6, 0.2);
+  const tube = (r, len, mat, x, y, z) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 14), mat); m.rotation.x = Math.PI / 2; m.position.set(x, y, z); m.castShadow = true; return m; };
   switch (id) {
     case 'schaufel': {
-      const st = cyl(0.03, 0.03, 1.1, 5, 0x9a6b3a); st.rotation.x = Math.PI / 2; st.position.z = -0.25; g.add(st);
-      g.add(mkBox(0.26, 0.04, 0.34, 0x8d99a6, 0, 0, -0.95));
-      g.add(mkBox(0.14, 0.05, 0.08, 0x333333, 0, 0, 0.3));
+      g.add(tube(0.02, 1.15, std(0x9a6b3a, 0.7), 0, 0, -0.22));
+      const bl = extrudeSide([[-1.18, 0], [-1.1, 0.012], [-0.78, 0.02], [-0.76, -0.012], [-1.1, -0.012]], 0.24, 0.006, std(0x8d99a6, 0.35, 0.9)); g.add(bl);
+      const gr = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.014, 8, 14), poly); gr.position.set(0, 0, 0.4); gr.rotation.y = Math.PI / 2; g.add(gr);
       break;
     }
     case 'banane': {
-      const R = 0.17;
-      for (let i = 0; i < 7; i++) {
-        const a = -0.75 + i * 0.25;
-        const tip = i === 0 || i === 6;
-        const s = cyl(tip ? 0.014 : 0.03, tip ? 0.022 : 0.03, 0.058, 6, i === 0 ? 0x5a3d16 : (i === 6 ? 0x8a7a2a : 0xffd92e),
-          0, Math.cos(a) * R - R, -Math.sin(a) * R);
-        s.rotation.x = -a - Math.PI / 2;
-        g.add(s);
+      const pts = []; for (let i = 0; i <= 12; i++) { const a = -0.8 + i * 0.133; pts.push(new THREE.Vector3(0, Math.cos(a) * 0.17 - 0.17, -Math.sin(a) * 0.17)); }
+      const curve = new THREE.CatmullRomCurve3(pts);
+      const geo = new THREE.TubeGeometry(curve, 24, 0.03, 10, false);
+      const pos = geo.attributes.position; // zu den Enden verjuengen
+      for (let i = 0; i < pos.count; i++) {
+        const ring = Math.floor(i / 11), t = ring / 24, c = curve.getPoint(t), k = 0.35 + 0.65 * Math.sin(Math.min(1, Math.max(0, t)) * Math.PI) ** 0.6;
+        pos.setXYZ(i, c.x + (pos.getX(i) - c.x) * k, c.y + (pos.getY(i) - c.y) * k, c.z + (pos.getZ(i) - c.z) * k);
       }
+      geo.computeVertexNormals();
+      const m = new THREE.Mesh(geo, std(0xf5cf1c, 0.5)); m.castShadow = true; g.add(m);
+      const e0 = curve.getPoint(0), e1 = curve.getPoint(1);
+      g.add(part(avatarGeo().sphere, std(0x4a3212, 0.8), e0.x, e0.y, e0.z, 0.013, 0.013, 0.022)); g.add(part(avatarGeo().sphere, std(0x6b5a1a, 0.8), e1.x, e1.y, e1.z, 0.012, 0.012, 0.012));
       break;
     }
     case 'pistole':
-      g.add(mkBox(0.06, 0.09, 0.3, 0x2b2b2e, 0, 0.03, -0.12));
-      g.add(mkBox(0.055, 0.16, 0.08, 0x3a2a1e, 0, -0.07, 0.0));
+      g.add(extrudeSide([[-0.27, 0.085], [0.05, 0.085], [0.06, 0.03], [-0.02, 0.02], [-0.27, 0.02]], 0.034, 0.005, steel));
+      g.add(extrudeSide([[-0.06, 0.02], [0.05, 0.03], [0.085, -0.13], [0.02, -0.14], [-0.01, -0.03], [-0.07, -0.02]], 0.03, 0.006, poly));
+      g.add(tube(0.008, 0.02, steel, 0, 0.055, -0.28));
       break;
     case 'schrot':
-      g.add(mkBox(0.07, 0.08, 0.85, 0x33302c, 0, 0.03, -0.4));
-      g.add(mkBox(0.08, 0.07, 0.25, 0x7a4a22, 0, 0.0, -0.35));
-      g.add(mkBox(0.07, 0.14, 0.34, 0x7a4a22, 0, -0.04, 0.2));
+      g.add(tube(0.017, 0.74, steel, 0, 0.045, -0.5)); g.add(tube(0.02, 0.5, steel, 0, 0.012, -0.38));
+      g.add(extrudeSide([[-0.6, 0.0], [-0.36, 0.0], [-0.36, -0.03], [-0.6, -0.03]], 0.05, 0.008, wood));
+      g.add(extrudeSide([[-0.14, 0.07], [0.02, 0.07], [0.1, 0.03], [0.44, 0.0], [0.44, -0.12], [0.12, -0.05], [0.04, -0.12], [-0.02, -0.11], [0.0, -0.01], [-0.14, -0.01]], 0.045, 0.008, wood));
       break;
     case 'stg':
-      g.add(mkBox(0.07, 0.11, 0.7, 0x2a2d30, 0, 0.03, -0.3));
-      g.add(mkBox(0.04, 0.04, 0.3, 0x1c1c1c, 0, 0.04, -0.78));
-      g.add(mkBox(0.06, 0.22, 0.09, 0x1c1c1c, 0, -0.13, -0.25));
-      g.add(mkBox(0.055, 0.15, 0.08, 0x3a2a1e, 0, -0.09, 0.0));
-      g.add(mkBox(0.06, 0.1, 0.3, 0x3a2a1e, 0, 0.0, 0.2));
+      g.add(extrudeSide([[-0.5, 0.075], [0.06, 0.075], [0.06, 0.0], [-0.5, 0.0]], 0.05, 0.006, steel));
+      g.add(tube(0.011, 0.34, steel, 0, 0.04, -0.66)); g.add(tube(0.017, 0.07, steel, 0, 0.04, -0.85));
+      g.add(extrudeSide([[-0.48, 0.0], [-0.2, 0.0], [-0.2, -0.035], [-0.48, -0.035]], 0.055, 0.008, poly));
+      g.add(extrudeSide([[-0.2, 0.0], [-0.12, 0.0], [-0.14, -0.21], [-0.21, -0.22]], 0.035, 0.004, steel));
+      g.add(extrudeSide([[-0.02, 0.0], [0.05, 0.0], [0.09, -0.14], [0.03, -0.15]], 0.034, 0.006, poly));
+      g.add(extrudeSide([[0.06, 0.07], [0.38, 0.055], [0.38, -0.06], [0.3, -0.06], [0.2, 0.0], [0.06, 0.0]], 0.04, 0.006, poly));
+      g.add(extrudeSide([[-0.3, 0.075], [-0.12, 0.075], [-0.12, 0.1], [-0.3, 0.1]], 0.02, 0.003, steel));
       break;
-    case 'pzf': {
-      const t = cyl(0.07, 0.07, 1.3, 7, 0x4a5a3a); t.rotation.x = Math.PI / 2; t.position.set(0, 0.06, -0.2); g.add(t);
-      const w = cyl(0.02, 0.11, 0.3, 7, 0x5a3a2a); w.rotation.x = -Math.PI / 2; w.position.set(0, 0.06, -0.95); g.add(w);
-      g.add(mkBox(0.05, 0.14, 0.07, 0x2b2b2b, 0, -0.05, -0.1));
+    case 'pzf':
+      g.add(tube(0.045, 1.25, std(0x4a5a3a, 0.6, 0.3), 0, 0.06, -0.2));
+      { const w = new THREE.Mesh(new THREE.ConeGeometry(0.085, 0.3, 16), std(0x5a3a2a, 0.5, 0.3)); w.rotation.x = -Math.PI / 2; w.position.set(0, 0.06, -0.97); w.castShadow = true; g.add(w); }
+      g.add(extrudeSide([[-0.14, 0.02], [-0.07, 0.02], [-0.04, -0.12], [-0.11, -0.12]], 0.03, 0.005, poly));
+      g.add(tube(0.06, 0.1, std(0x2e3a26, 0.6, 0.3), 0, 0.06, 0.42));
       break;
-    }
-    case 'granate': {
-      const b = new THREE.Mesh(new THREE.IcosahedronGeometry(0.09, 0), lam(0x3f5a2a)); b.castShadow = true; g.add(b);
-      g.add(mkBox(0.04, 0.05, 0.04, 0x999999, 0, 0.1, 0));
+    case 'granate':
+      g.add(part(avatarGeo().sphere, std(0x3f5a2a, 0.6, 0.3), 0, 0, 0, 0.055, 0.068, 0.055));
+      g.add(part(new THREE.CylinderGeometry(0.02, 0.022, 0.04, 10), steel, 0, 0.075, 0));
+      { const r = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.004, 6, 12), std(0xb9bcc2, 0.3, 0.9)); r.position.set(0.03, 0.09, 0); g.add(r); }
       break;
-    }
-    case 'bier':
-      g.add(cyl(0.045, 0.05, 0.2, 7, 0x6b3a12, 0, 0, 0)); g.add(cyl(0.02, 0.035, 0.1, 6, 0x6b3a12, 0, 0.15, 0));
-      g.add(cyl(0.051, 0.051, 0.08, 7, 0xf2e6c2, 0, 0, 0));
-      break;
-    case 'schnaps':
-      g.add(cyl(0.04, 0.04, 0.16, 6, 0xffb347, 0, 0, 0, { transparent: true, opacity: 0.8 })); g.add(cyl(0.015, 0.02, 0.07, 5, 0xdddddd, 0, 0.11, 0));
-      break;
-    case 'semmel': {
-      const b = new THREE.Mesh(new THREE.IcosahedronGeometry(0.11, 1), lam(0xd9a05b)); b.scale.y = 0.6; g.add(b);
-      g.add(mkBox(0.24, 0.03, 0.2, 0xc8736a, 0, 0, 0));
+    case 'bier': {
+      const b = lathe([[-0.1, 0.001], [-0.1, 0.032], [0.02, 0.033], [0.06, 0.016], [0.13, 0.013], [0.135, 0.015], [0.14, 0.001]], std(0x5a2f0e, 0.15, 0.1, { transparent: true, opacity: 0.92 }), 16);
+      b.rotation.x = -Math.PI / 2; g.add(b);
+      g.add(part(new THREE.CylinderGeometry(0.0335, 0.0335, 0.06, 16, 1, true), std(0xf2e6c2, 0.7), 0, -0.03, 0));
+      g.add(part(new THREE.CylinderGeometry(0.015, 0.015, 0.008, 12), std(0xc9a227, 0.3, 0.9), 0, 0.142, 0));
       break;
     }
-    case 'gras': {
-      const j = cyl(0.012, 0.018, 0.2, 5, 0xf5f5f0); j.rotation.x = Math.PI / 2; j.position.z = -0.08; g.add(j);
-      g.add(mkBox(0.03, 0.03, 0.03, 0xff6622, 0, 0, -0.19, { emissive: 0xff4400 }));
+    case 'schnaps': {
+      const b = lathe([[-0.07, 0.001], [-0.07, 0.03], [0.03, 0.03], [0.05, 0.012], [0.09, 0.011], [0.095, 0.001]], std(0xf6c66a, 0.08, 0.1, { transparent: true, opacity: 0.75 }), 14);
+      b.rotation.x = -Math.PI / 2; g.add(b);
+      g.add(part(new THREE.CylinderGeometry(0.013, 0.013, 0.02, 10), std(0x2a2a2a, 0.5), 0, 0.1, 0));
       break;
     }
+    case 'semmel':
+      g.add(part(avatarGeo().sphere, std(0xd9a05b, 0.8), 0, 0.012, 0, 0.1, 0.045, 0.085)); g.add(part(avatarGeo().sphere, std(0xcf9550, 0.8), 0, -0.025, 0, 0.098, 0.03, 0.083));
+      g.add(part(new THREE.CylinderGeometry(0.1, 0.1, 0.022, 16), std(0xc8736a, 0.7), 0, -0.006, 0, 1, 1, 0.85));
+      break;
+    case 'gras':
+      g.add(tube(0.006, 0.1, std(0xf5f5f0, 0.9), 0, 0, -0.05)); g.add(tube(0.0065, 0.03, std(0xd9b06a, 0.9), 0, 0, 0.012));
+      g.add(part(avatarGeo().sphere, std(0xff6622, 0.5, 0, { emissive: 0xff4400, emissiveIntensity: 1.5 }), 0, 0, -0.102, 0.006, 0.006, 0.006));
+      break;
     case 'pilze':
-      g.add(cyl(0.025, 0.03, 0.12, 6, 0xf2ead8, 0, 0, 0));
-      { const c = new THREE.Mesh(new THREE.SphereGeometry(0.09, 7, 4, 0, Math.PI * 2, 0, Math.PI / 2), lam(0xd0302a)); c.position.y = 0.05; g.add(c); }
+      g.add(part(new THREE.CylinderGeometry(0.014, 0.02, 0.1, 12), std(0xf2ead8, 0.8), 0, 0, 0));
+      { const c = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), std(0xc9261f, 0.5)); c.position.y = 0.04; c.castShadow = true; g.add(c);
+        for (let i = 0; i < 6; i++) g.add(part(avatarGeo().sphere, std(0xffffff, 0.8), Math.cos(i * 1.05) * 0.035, 0.078, Math.sin(i * 1.05) * 0.035, 0.008, 0.004, 0.008)); }
       break;
     case 'pulver':
-      g.add(mkBox(0.12, 0.14, 0.03, 0xf8f8ff, 0, 0, 0)); g.add(mkBox(0.06, 0.05, 0.035, 0xffd21f, 0, 0, 0));
+      g.add(extrudeSide([[-0.045, -0.06], [0.045, -0.06], [0.05, 0.06], [-0.05, 0.06]], 0.016, 0.006, std(0xf4f4f8, 0.4, 0, { transparent: true, opacity: 0.9 })));
+      g.add(part(new THREE.BoxGeometry(0.03, 0.04, 0.06), std(0xffd21f, 0.6), 0, 0, 0));
       break;
     case 'platte':
-      g.add(mkBox(0.3, 0.05, 0.3, 0xb0b0b0, 0, 0, -0.1));
+      g.add(part(new THREE.BoxGeometry(0.3, 0.05, 0.3), std(0xb0b0b0, 0.95), 0, 0, -0.1));
       break;
     case 'wand':
-      g.add(mkBox(0.3, 0.22, 0.05, 0xb0b0b0, 0, 0, -0.1));
+      g.add(part(new THREE.BoxGeometry(0.3, 0.22, 0.05), std(0xb0b0b0, 0.95), 0, 0, -0.1));
       break;
     default:
       break;
@@ -201,26 +215,38 @@ export function makeAvatar(color, look) {
 export const BAGGER = { L1: 5.0, L2: 4.0, SY: 2.2, SZ: 1.1 };
 export function makeBagger() {
   const group = new THREE.Group();
-  const Y = 0xf2b90f, D = 0x2e2f33;
+  const yel = std(0xf0b20a, 0.45, 0.35), dark = std(0x26272b, 0.75, 0.4), steel = std(0x3c3e44, 0.5, 0.7), chrome = std(0xd5d8dc, 0.15, 1.0);
+  const cylX = (r, len, mat, x, y, z) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 18), mat); m.rotation.z = Math.PI / 2; m.position.set(x, y, z); m.castShadow = true; return m; };
+  // Raupenfahrwerk: Kettenprofil + Laufrollen
   for (const sx of [-1.25, 1.25]) {
-    group.add(mkBox(0.75, 0.8, 4.6, D, sx, 0.4, 0));
-    group.add(mkBox(0.8, 0.5, 3.6, 0x1e1f22, sx, 0.45, 0));
+    const tr = extrudeSide([[-2.3, 0.3], [-2.1, 0.75], [-1.7, 0.86], [1.7, 0.86], [2.1, 0.75], [2.3, 0.3], [2.0, 0.02], [-2.0, 0.02]], 0.72, 0.05, dark); tr.position.x = sx; group.add(tr);
+    for (const z of [-1.95, 1.95]) group.add(cylX(0.36, 0.78, steel, sx, 0.42, z));
+    for (const z of [-1.2, -0.4, 0.4, 1.2]) group.add(cylX(0.17, 0.78, steel, sx, 0.2, z));
+    const fr = extrudeSide([[-1.6, 0.3], [1.6, 0.3], [1.5, 0.6], [-1.5, 0.6]], 0.5, 0.03, yel); fr.position.x = sx * 0.98; group.add(fr);
   }
-  group.add(mkBox(2.0, 0.5, 2.8, 0x44464c, 0, 0.9, 0));
+  group.add(part(new THREE.BoxGeometry(2.0, 0.45, 2.4), steel, 0, 0.72, 0));
+  group.add(part(new THREE.CylinderGeometry(0.85, 0.9, 0.28, 24), dark, 0, 1.06, 0));
   const upper = new THREE.Group(); upper.position.y = 1.2; group.add(upper);
-  upper.add(mkBox(2.7, 1.0, 3.3, Y, 0, 0.5, -0.4));
-  upper.add(mkBox(2.7, 1.1, 0.9, 0x3a3b40, 0, 0.55, -2.2));
-  upper.add(mkBox(1.15, 1.6, 1.5, Y, 0.72, 1.8, 0.35));
-  upper.add(mkBox(1.0, 0.9, 1.52, 0x9fd8ff, 0.72, 2.0, 0.36, { transparent: true, opacity: 0.7 }));
-  upper.add(mkBox(1.25, 0.1, 1.6, 0x3a3b40, 0.72, 2.65, 0.35));
-  const ex = cyl(0.09, 0.09, 0.9, 6, 0x222222, -0.9, 1.4, -1.4); upper.add(ex);
+  const hull = extrudeSide([[-2.65, 0.05], [-2.7, 0.75], [-2.4, 1.1], [-0.2, 1.1], [0.9, 0.85], [1.35, 0.4], [1.3, 0.05]], 2.7, 0.08, yel); upper.add(hull);
+  upper.add(part(new THREE.BoxGeometry(2.74, 0.95, 0.5), dark, 0, 0.55, -2.55));
+  // Kabine mit Verglasung
+  const cab = extrudeSide([[-0.45, 1.05], [-0.45, 2.55], [0.75, 2.6], [1.12, 1.9], [1.15, 1.05]], 1.12, 0.05, yel); cab.position.x = 0.76; upper.add(cab);
+  const gl = extrudeSide([[-0.36, 1.45], [-0.36, 2.46], [0.7, 2.5], [1.04, 1.88], [1.06, 1.45]], 1.16, 0, GLASS()); gl.position.x = 0.76; upper.add(gl);
+  upper.add(part(new THREE.BoxGeometry(0.9, 0.9, 0.04), GLASS(), 0.76, 1.95, 1.13));
+  upper.add(part(new THREE.CylinderGeometry(0.07, 0.07, 0.9, 12), dark, -0.9, 1.5, -1.5));
+  upper.add(part(new THREE.BoxGeometry(0.05, 0.6, 0.05), dark, -1.3, 1.4, 1.0)); upper.add(part(new THREE.BoxGeometry(0.22, 0.14, 0.03), chrome, -1.3, 1.72, 1.0));
+  // Ausleger, Stiel, Loeffel mit Hydraulikzylindern
   const boom = new THREE.Group(); boom.position.set(-0.25, 1.0, BAGGER.SZ); upper.add(boom);
-  boom.add(mkBox(0.5, 0.55, BAGGER.L1, Y, 0, 0, BAGGER.L1 / 2));
+  boom.add(extrudeSide([[0, -0.28], [0, 0.3], [2.3, 0.62], [BAGGER.L1 + 0.15, 0.24], [BAGGER.L1 + 0.15, -0.2], [2.5, -0.22]], 0.46, 0.04, yel));
+  { const c1 = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.9, 12), steel); c1.rotation.x = 1.25; c1.position.set(0, -0.45, 1.25); boom.add(c1);
+    const c2 = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.2, 12), chrome); c2.rotation.x = 1.25; c2.position.set(0, -0.2, 2.1); boom.add(c2);
+    const c3 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.7, 12), steel); c3.rotation.x = 1.72; c3.position.set(0, 0.72, 3.3); boom.add(c3); }
   const stick = new THREE.Group(); stick.position.set(0, 0, BAGGER.L1); boom.add(stick);
-  stick.add(mkBox(0.36, 0.42, BAGGER.L2, Y, 0, 0, BAGGER.L2 / 2));
+  stick.add(extrudeSide([[-0.5, 0.42], [0.2, 0.4], [BAGGER.L2 + 0.1, 0.16], [BAGGER.L2 + 0.1, -0.14], [0, -0.22], [-0.5, 0.1]], 0.34, 0.03, yel));
+  { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.6, 12), chrome); c.rotation.x = 1.5; c.position.set(0, 0.4, 2.4); stick.add(c); }
   const bucket = new THREE.Group(); bucket.position.set(0, 0, BAGGER.L2); stick.add(bucket);
-  bucket.add(mkBox(1.2, 0.9, 0.9, 0x44464c, 0, -0.2, 0.2));
-  for (let i = -2; i <= 2; i++) bucket.add(mkBox(0.12, 0.3, 0.14, 0xd0d0d0, i * 0.25, -0.75, 0.5));
+  bucket.add(extrudeSide([[-0.25, 0.3], [0.55, 0.3], [0.95, -0.1], [0.9, -0.6], [0.5, -0.98], [0.0, -0.9], [-0.25, -0.4]], 1.2, 0.03, steel));
+  for (let i = -2; i <= 2; i++) { const t = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.3, 6), chrome); t.position.set(i * 0.25, -1.05, 0.6); t.rotation.x = 2.6; bucket.add(t); }
   return { group, upper, boom, stick, bucket };
 }
 // r: horizontale Reichweite ab Drehpunkt, ty: Zielhoehe relativ zum Baggerursprung
