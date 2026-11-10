@@ -11,6 +11,7 @@ import * as C from './combat.js';
 import * as V from './vehicles.js';
 import { initNpcs, updateNpcs } from './npc.js';
 import { radio } from './radio.js';
+import * as P2P from './p2p.js';
 
 const $ = (id) => document.getElementById(id);
 const me = G.me;
@@ -118,33 +119,44 @@ $('btnGfx').onclick = () => {
   location.reload();
 };
 let connecting = false;
-async function start(url) {
+let hosting = false;
+async function start(url, code) {
   if (connecting || G.started) return;
   if (!worldOk) { status('Die Karte lädt noch – einen Moment…'); return; }
   connecting = true;
   initAudio();
-  status('Verbinde…');
+  status(code ? 'Suche Spiel ' + code + '…' : 'Verbinde…');
   me.name = ($('name').value.trim() || 'Hawara').slice(0, 16);
-  try { await net.connect(url); } catch (e) {
-    status('Keine Verbindung (' + e.message + '). Läuft das Spiel beim Host? Stimmt die IP?');
+  try {
+    if (code) net.adopt(await P2P.joinByCode(code)); else await net.connect(url);
+  } catch (e) {
+    status(code ? e.message + '.' : 'Keine Verbindung (' + e.message + '). Läuft das Spiel beim Host? Stimmt die Adresse?');
     connecting = false; return;
   }
   net.send({ t: 'join', name: me.name, color: me.color, wiba: me.wiba });
   radio.start();
 }
-$('btnHost').onclick = () => start((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
+const localWs = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
+$('btnHost').onclick = () => { hosting = true; start(localWs); };
 $('btnJoin').onclick = () => {
-  let ip = $('ip').value.trim().replace(/^(https?|wss?):\/\//, '').replace(/\/.*$/, '');
-  if (!ip) { status('Bitte die IP-Adresse vom Host eintragen.'); return; }
-  if (!/:\d+$/.test(ip)) ip += ':31337';
-  start('ws://' + ip);
+  const raw = $('ip').value.trim();
+  if (!raw) { status('Bitte den Spielcode vom Host eintragen (6 Zeichen).'); return; }
+  if (/[.:]/.test(raw) || /^localhost/i.test(raw)) { // IP-Adresse (Profi-Weg)
+    let ip = raw.replace(/^(https?|wss?):\/\//, '').replace(/\/.*$/, '');
+    if (!/:\d+$/.test(ip)) ip += ':31337';
+    start('ws://' + ip); return;
+  }
+  const code = P2P.cleanCode(raw);
+  if (code.length !== 6) { status('Der Spielcode hat 6 Zeichen, z. B. K7M2QX.'); return; }
+  start(null, code);
 };
 $('ip').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btnJoin').click(); });
-fetch('/info').then((r) => r.json()).then((i) => {
-  if (i.ips && i.ips.length) {
-    $('hostinfo').textContent = 'Wenn du hostest, geben Freunde im selben Netzwerk ein: ' + i.ips.map((ip) => ip + (i.port === 31337 ? '' : ':' + i.port)).join('  oder  ');
-  }
-}).catch(() => {});
+P2P.host.onChange = () => {
+  const h = P2P.host, el = $('code');
+  if (!hosting || !G.started) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  el.textContent = h.status === 'bereit' ? `🎮 Spielcode: ${h.code}  ·  Freunde: ${h.players}` : (h.status === 'verbindet' ? '🎮 Spielcode wird erstellt…' : '🎮 Kein Spielcode (' + h.status + ') – Freunde im selben WLAN können per IP beitreten');
+};
 
 // ---------- Mitspieler ----------
 function addPlayer(d) {
@@ -248,6 +260,7 @@ net.on('welcome', (m) => {
   $('clickhint').classList.remove('hidden');
   G.started = true;
   saveGame();
+  if (hosting) { P2P.startHost(localWs); P2P.host.onChange(); UI.addChat('', 'Du hostest. Oben rechts steht dein Spielcode – den gibst du deinen Freunden.'); }
   UI.toast('Servus in Vöcklabruck! F1 zeigt die Steuerung.', 'good');
   UI.addChat('', 'Tipp: [M] große Karte · [B] Bier · [P] Radio · Die Welt ist 1:1 – nimm ein Auto. Der Attersee liegt ca. 9 km südwestlich.');
 });

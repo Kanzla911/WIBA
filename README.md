@@ -16,13 +16,13 @@ Flieger und Kampfjets fliegen, im Wirtshaus versumpern – und nebenbei die Bana
 
 ### Mit Freunden spielen
 
-- **Einer hostet:** einfach „Spiel hosten“ klicken. Beim ersten Mal fragt die Windows-Firewall –
-  „Zugriff zulassen“ anklicken. Am Startbildschirm steht unten die eigene IP-Adresse.
-- **Die anderen:** IP-Adresse des Hosts eintragen und **Beitreten** klicken.
-- **Gleiches WLAN/LAN:** funktioniert sofort.
-- **Übers Internet:** entweder am Router Port **31337 (TCP)** zum Host-PC weiterleiten und die
-  öffentliche IP verwenden – oder alle installieren ein kostenloses VPN wie Tailscale, ZeroTier
-  oder Radmin VPN und nehmen die dort angezeigte IP.
+1. **Einer hostet:** „Spiel hosten" klicken. Oben rechts erscheint der **Spielcode** (6 Zeichen, z. B. `K7M2QX`). Der Code bleibt bei jedem Start gleich.
+2. **Die anderen:** Code eintippen, „Beitreten" klicken. Fertig – im selben WLAN oder übers Internet, ohne Router-Einstellungen.
+3. Alle brauchen dieselbe Spielversion.
+
+Die Verbindung läuft direkt zwischen euren PCs (WebRTC); nur zum Finden über den Code wird der öffentliche PeerJS-Vermittlungsdienst benutzt.
+In manchen Netzen (z. B. Handy-Hotspot, strenge Firmen-/Schulnetze) klappt die Direktverbindung nicht – dann statt des Codes die
+IP-Adresse des Hosts eintragen (gleiches WLAN) oder ein VPN wie Tailscale/Radmin benutzen.
 
 Die Welt (alles Gegrabene und Gebaute) wird beim Host gespeichert und bleibt erhalten.
 Geld, Inventar und WIBA-Punkte speichert jeder Spieler für sich.

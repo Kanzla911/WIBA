@@ -23,6 +23,16 @@ export const net = {
   ws: null, handlers: {},
   on(type, fn) { this.handlers[type] = fn; },
   send(obj) { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(obj)); },
+  // Bereits offene Verbindung uebernehmen (Spielcode / WebRTC)
+  adopt(sock) {
+    this.ws = sock;
+    sock.onclose = () => { if (this.ws === sock && this.handlers.closed) this.handlers.closed(); };
+    sock.onmessage = (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+      const h = this.handlers[m.t];
+      if (h) h(m);
+    };
+  },
   connect(url) {
     return new Promise((resolve, reject) => {
       let done = false;

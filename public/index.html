@@ -63,7 +63,8 @@
   #wibabar { position: absolute; left: 50%; top: 68%; transform: translateX(-50%); width: 260px; text-align: center; font-size: 13px; text-shadow: 0 1px 2px #000; }
   #wibabar .bar > div { background: linear-gradient(#ffe45a, #f2b90f); transition: none; }
   #radio { position: absolute; right: 14px; top: 14px; background: var(--p); padding: 5px 11px; border-radius: 8px; font-size: 12px; }
-  #feed { position: absolute; right: 14px; top: 48px; text-align: right; font-size: 14px; }
+  #code { position: absolute; right: 14px; top: 46px; background: rgba(70,60,10,.9); border: 1px solid var(--y); color: #fff; padding: 6px 12px; border-radius: 8px; font-size: 14px; font-weight: bold; user-select: text; letter-spacing: .5px; }
+  #feed { position: absolute; right: 14px; top: 84px; text-align: right; font-size: 14px; }
   #feed div { background: var(--p); padding: 4px 10px; border-radius: 7px; margin-bottom: 4px; display: inline-block; clear: both; float: right; }
   #chatlog { position: absolute; left: 14px; top: 250px; width: 360px; font-size: 14px; text-shadow: 0 1px 2px #000; }
   #chatlog div { margin-bottom: 2px; background: rgba(0,0,0,.28); padding: 2px 7px; border-radius: 5px; display: inline-block; clear: both; float: left; max-width: 100%; word-wrap: break-word; }
@@ -125,6 +126,7 @@
   <div id="chatlog"></div>
   <input id="chatinput" class="hidden" type="text" maxlength="160" placeholder="Nachricht… (Enter = senden)">
   <div id="radio"></div>
+  <div id="code" class="hidden"></div>
   <div id="feed"></div>
   <div id="toasts"></div>
   <div id="crosshair"></div>
@@ -198,18 +200,19 @@
     <label>Helmfarbe</label>
     <div id="colors"></div>
     <div class="row"><button class="btn" id="btnHost">🏗️ Spiel hosten / Solo</button></div>
-    <label>Bei Freund beitreten (IP-Adresse des Hosts)</label>
+    <label>Bei Freund beitreten – Spielcode eingeben</label>
     <div class="row" style="margin-top:0">
-      <input id="ip" type="text" placeholder="z. B. 192.168.0.42" style="flex:2">
+      <input id="ip" type="text" placeholder="z. B. K7M2QX" style="flex:2;text-transform:uppercase;letter-spacing:3px;font-weight:bold">
       <button class="btn alt" id="btnJoin">🤝 Beitreten</button>
     </div>
     <div class="row"><button class="btn alt" id="btnGfx" style="font-size:14px;padding:9px">🖥️ Grafik: Hoch</button></div>
     <div id="status"></div>
-    <div id="hostinfo"></div>
+    <div id="hostinfo">So geht’s: Einer klickt „Spiel hosten“ und sagt den Freunden den Spielcode (steht dann oben rechts). Die anderen tippen den Code ein und klicken „Beitreten“. Fertig – egal ob im selben WLAN oder übers Internet.</div>
   </div>
 </div>
 
 <script src="./vendor/hls.min.js"></script>
+<script src="./vendor/peerjs.min.js"></script>
 <script type="module" src="./js/game.js"></script>
 </body>
 </html>
