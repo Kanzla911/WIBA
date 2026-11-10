@@ -1,8 +1,8 @@
 // WIBA - NPCs: Bewohner, Arbeiter, Badegaeste, Wanderer (lokal simuliert, nicht synchronisiert)
 import * as THREE from 'three';
 import { G } from './state.js';
-import { getHeight } from './terrain.js';
-import { npcSpots, pointInBoxes, textTexture } from './world.js';
+import { getHeight, roadData } from './terrain.js';
+import { npcSpots, pointInBoxes, textTexture, mkBox, lam } from './world.js';
 import { makeAvatar } from './models.js';
 
 const LINES = {
@@ -29,7 +29,46 @@ function okSpot(x, z) {
   return h > 0.9 && !pointInBoxes(x, h + 1, z, 0.7);
 }
 
+function initCyclists() {
+  for (const rd of roadData) {
+    const nm = rd.road.name;
+    const cnt = nm === 'Ostufer' ? 4 : (nm === 'Westufer' ? 3 : (nm === 'Gahbergstraße' ? 2 : (nm === 'Weißenbachtal Straße' ? 1 : 0)));
+    for (let c = 0; c < cnt; c++) {
+      const av = makeAvatar(0xffffff, { shirt: [0xe74c3c, 0x27ae60, 0xf1c40f, 0x2980b9][c % 4], pants: 0x1c1c1c, hair: [0xe74c3c, 0x2980b9, 0xffffff][c % 3] });
+      const bike = new THREE.Group();
+      for (const wz of [-0.55, 0.55]) { const w = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.05, 5, 12), lam(0x1c1c1c)); w.rotation.y = Math.PI / 2; w.position.set(0, 0.36, wz); bike.add(w); }
+      bike.add(mkBox(0.06, 0.06, 1.0, 0xd0322a, 0, 0.62, 0)); bike.add(mkBox(0.06, 0.45, 0.06, 0xd0322a, 0, 0.82, 0.45)); bike.add(mkBox(0.45, 0.05, 0.05, 0x333333, 0, 1.05, 0.45));
+      av.group.add(bike); av.body.position.y = 0.12; av.body.rotation.x = 0.35; av.armL.rotation.x = -1.1; av.armR.rotation.x = -1.1;
+      av.group.visible = false; G.scene.add(av.group);
+      G.npcs.push({ av, bike: true, path: rd.pts, idx: (0.1 + 0.8 * rnd()) * (rd.pts.length - 1), dir: c % 2 ? 1 : -1, side: rd.road.w / 2 - 1.1,
+        pos: new THREE.Vector3(), kind: 'wander', state: 'ride', t: 0, yaw: 0, phase: rnd() * 6, sayT: 0, sayCd: 4, bubble: null, visible: false, home: { r: 0 } });
+    }
+  }
+}
+function updateCyclist(n, dt, me, veh) {
+  const P = n.path;
+  if (n.state === 'ride') {
+    n.idx += n.dir * (4.6 * dt) / 4;
+    if (n.idx < 3) { n.idx = 3; n.dir = 1; } else if (n.idx > P.length - 4) { n.idx = P.length - 4; n.dir = -1; }
+  }
+  const i = Math.floor(n.idx), f = n.idx - i, a = P[i], b = P[Math.min(P.length - 1, i + 1)];
+  let dx = b[0] - a[0], dz = b[1] - a[1]; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+  n.pos.set(a[0] + (b[0] - a[0]) * f - dz * n.side * n.dir, a[2] + (b[2] - a[2]) * f + 0.22, a[1] + (b[1] - a[1]) * f + dx * n.side * n.dir);
+  const pd = Math.hypot(n.pos.x - me.pos.x, n.pos.z - me.pos.z);
+  const vis = pd < 240 && G.daylight > 0.2;
+  if (vis !== n.visible) { n.visible = vis; n.av.group.visible = vis; }
+  if (!vis) return;
+  if (n.state === 'ride' && veh && pd < 2.4 && Math.abs(veh.speed || 0) > 5) hitNpc(n);
+  if (n.state === 'ride' && !veh && pd < 6) { n.sayCd -= dt; if (n.sayCd <= 0) say(n, 'wander'); }
+  if (n.sayT > 0) { n.sayT -= dt; if (n.sayT <= 0 && n.bubble) n.bubble.visible = false; }
+  n.av.group.position.copy(n.pos);
+  n.av.group.rotation.y = Math.atan2(dx * n.dir, dz * n.dir);
+  n.av.group.rotation.z = n.state === 'down' ? 1.45 : 0;
+  if (n.state === 'ride') { n.phase += dt * 7; n.av.legL.rotation.x = -0.9 + Math.sin(n.phase) * 0.6; n.av.legR.rotation.x = -0.9 - Math.sin(n.phase) * 0.6; }
+}
+
 export function initNpcs() {
+  initCyclists();
   for (const sp of npcSpots) {
     for (let i = 0; i < sp.n; i++) {
       let x = sp.x, z = sp.z, ok = false;
@@ -67,7 +106,7 @@ function say(n, group) {
 
 export function alarmNpcs(pos, radius) {
   for (const n of G.npcs) {
-    if (!n.visible || n.state === 'down') continue;
+    if (!n.visible || n.state === 'down' || n.bike) continue;
     const d = Math.hypot(n.pos.x - pos.x, n.pos.z - pos.z);
     if (d > radius) continue;
     const a = Math.atan2(n.pos.z - pos.z, n.pos.x - pos.x) + (Math.random() - 0.5);
@@ -85,9 +124,11 @@ export function hitNpc(n) {
 
 export function updateNpcs(dt) {
   const me = G.me, veh = me.vehicle;
+  const night = G.daylight < 0.2;
   for (const n of G.npcs) {
+    if (n.bike) { if (n.state === 'down') { n.t -= dt; if (n.t <= 0) n.state = 'ride'; } updateCyclist(n, dt, me, veh); continue; }
     const pd = Math.hypot(n.pos.x - me.pos.x, n.pos.z - me.pos.z);
-    const vis = pd < 240;
+    const vis = pd < 240 && !(night && (n.kind === 'bad' || n.kind === 'park' || n.kind === 'wander' || n.kind === 'hof' || n.kind === 'arbeit'));
     if (vis !== n.visible) { n.visible = vis; n.av.group.visible = vis; }
     if (n.state === 'down') { n.t -= dt; if (n.t <= 0) { n.state = 'idle'; n.t = 2; } }
     if (!vis) continue;

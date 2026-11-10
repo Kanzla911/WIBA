@@ -83,3 +83,24 @@ export function engine(on, pitch = 1, vol = 0.2, jet = false) {
   eng.ng.gain.setTargetAtTime(jet ? 0.9 : 0.15, t, 0.1);
   eng.g.gain.setTargetAtTime(vol, t, 0.1);
 }
+
+// Umgebung: Stadt, Wasser, Wind (Dauerrauschen) + Vogelstimmen
+let amb = null;
+export function ambient(city, waterL, wind) {
+  if (!ctx) return;
+  if (!amb) {
+    const n = ctx.createBufferSource(); n.buffer = noiseBuf; n.loop = true;
+    const mk = (type, f, q) => { const fl = ctx.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q; const g = ctx.createGain(); g.gain.value = 0; n.connect(fl); fl.connect(g); g.connect(master); return g; };
+    amb = { city: mk('lowpass', 260, 0.3), water: mk('bandpass', 700, 0.4), wind: mk('bandpass', 380, 1.2) };
+    n.start();
+  }
+  const t = ctx.currentTime;
+  amb.city.gain.setTargetAtTime(city, t, 0.6);
+  amb.water.gain.setTargetAtTime(waterL * (0.75 + 0.25 * Math.sin(t * 1.3)), t, 0.4);
+  amb.wind.gain.setTargetAtTime(wind, t, 0.8);
+}
+sfx.bird = () => {
+  const f = 2400 + Math.random() * 2200, n = 2 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < n; i++) tone(f * (1 + i * 0.06), 0.09, 0.035, 'sine', f * 1.35, i * 0.13);
+};
+sfx.bell = () => { tone(520, 1.6, 0.06, 'sine'); tone(1040, 1.2, 0.03, 'sine'); };

@@ -9,7 +9,8 @@ export const pois = []; // {x,y,z,kind,label}
 export const npcSpots = []; // {x,z,r,n,kind}
 export let sun = null, hemi = null, water = null;
 const clouds = [];
-let cloudMat = null;
+let cloudMat = null, sky = null, sunDisc = null, stars = null;
+const lampMat = new THREE.MeshBasicMaterial({ color: 0x888877, fog: false });
 let sceneRef = null;
 const matCache = new Map();
 
@@ -124,10 +125,16 @@ function house(x, z, w, d, h, color, roofColor, ry = 0, Yin) {
   roof.castShadow = true;
   g.add(roof);
   g.add(mkBox(1.3, 2.2, 0.15, 0x5a3a22, 0, 1.1, d / 2 + 0.03));
+  g.add(mkBox(0.9, 2.2, 0.9, 0x8d5a4a, w * 0.22, h + h * 0.36, 0));
+  const hs = Math.abs(Math.round(x * 7 + z * 13)) % 3;
+  if (hs === 0 && h < 7.5) { g.add(mkBox(w * 0.84, 0.9, 0.9, 0x7a4a22, 0, h * 0.5, d / 2 + 0.45)); g.add(mkBox(w * 0.84, 0.22, 0.5, 0xd0302a, 0, h * 0.5 + 0.5, d / 2 + 0.75)); }
+  if (hs === 1) g.add(mkBox(w + 0.06, h * 0.34, d + 0.06, 0x8a5a2f, 0, h * 0.83, 0));
   const nWin = Math.max(1, Math.floor(w / 4));
   for (let i = 0; i < nWin; i++) {
     const wx = -w / 2 + (i + 0.5) * (w / nWin);
     if (Math.abs(wx) < 1.4) continue;
+    g.add(mkBox(1.5, 1.5, 0.08, 0xffffff, wx, h * 0.55, d / 2 + 0.02));
+    if (hs === 2) g.add(mkBox(1.3, 0.22, 0.32, 0xd0302a, wx, h * 0.55 - 0.78, d / 2 + 0.2));
     g.add(mkBox(1.2, 1.2, 0.12, 0xbfe6ff, wx, h * 0.55, d / 2 + 0.03));
     g.add(mkBox(1.2, 1.2, 0.12, 0xbfe6ff, wx, h * 0.55, -d / 2 - 0.03));
   }
@@ -202,10 +209,41 @@ function ribbon(pts, w, color, lift) {
 function buildRoadsRivers() {
   for (const rd of roadData) {
     if (rd.pts.length < 2) continue;
-    ribbon(rd.pts, rd.road.w, rd.road.col || 0x55555c, 0.22);
-    if (rd.road.w >= 8) ribbon(rd.pts, 0.35, 0xe8e8e8, 0.27);
+    ribbon(rd.pts, rd.road.w, rd.road.col || 0x55555c, 0.3);
+    if (rd.road.w >= 8) ribbon(rd.pts, 0.35, 0xe8e8e8, 0.36);
   }
-  for (const rv of riverData) if (rv.pts.length > 1) ribbon(rv.pts, rv.river.w + 3, 0x3a9ad8, 0);
+  // Fluesse: unter Strassen unterbrochen (Bruecke/Durchlass)
+  const rsamples = [];
+  for (const rv of riverData) {
+    let seg = [];
+    for (const p of rv.pts) {
+      rsamples.push([p[0], p[1], rv.river.w]);
+      if (maskAt(p[0], p[1]) === 1) { if (seg.length > 1) ribbon(seg, rv.river.w + 3, 0x3a9ad8, 0); seg = []; } else seg.push(p);
+    }
+    if (seg.length > 1) ribbon(seg, rv.river.w + 3, 0x3a9ad8, 0);
+  }
+  // Brueckengelaender, wo Strassen Fluesse queren
+  const post = new THREE.BoxGeometry(0.22, 1.1, 0.22), rail = lam(0xdadada);
+  for (const rd of roadData) {
+    for (let i = 1; i < rd.pts.length - 1; i++) {
+      const p = rd.pts[i];
+      let near = false;
+      for (const r of rsamples) if (Math.abs(r[0] - p[0]) < 9 && Math.abs(r[1] - p[1]) < 9 && Math.hypot(r[0] - p[0], r[1] - p[1]) < r[2] / 2 + 4) { near = true; break; }
+      if (!near) continue;
+      const a = rd.pts[i - 1], b = rd.pts[i + 1];
+      let dx = b[0] - a[0], dz = b[1] - a[1]; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+      for (const sgn of [-1, 1]) for (const off of [-1.3, 1.3]) {
+        const m = new THREE.Mesh(post, rail);
+        m.position.set(p[0] - dz * sgn * (rd.road.w / 2 + 0.4) + dx * off, p[2] + 0.75, p[1] + dx * sgn * (rd.road.w / 2 + 0.4) + dz * off);
+        sceneRef.add(m);
+      }
+    }
+  }
+}
+function lamp(x, z) {
+  const y = getHeight(x, z);
+  sceneRef.add(mkBox(0.16, 4.2, 0.16, 0x2b2b2b, x, y + 2.1, z));
+  const b = new THREE.Mesh(new THREE.SphereGeometry(0.34, 8, 6), lampMat); b.position.set(x, y + 4.4, z); sceneRef.add(b);
 }
 
 // Naechster Uferpunkt (achsparallel Richtung See)
@@ -283,6 +321,8 @@ function buildVoecklabruck(rnd) {
   for (let i = 0; i < 4; i++) { bench(T.x - 44 + i * 8, -896, Math.PI); sceneRef.add(mkBox(1, 0.8, 1, 0xb98a4f, T.x - 40 + i * 8, Y + 0.5, -893)); }
   const well = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.4, 1, 10), lam(0x9a9a9a)); well.position.set(T.x + 50, Y + 0.5, -916); sceneRef.add(well); solid(T.x + 50, Y, -916, 4, 1, 4);
   label('Stadtplatz Vöcklabruck', T.x, -905, 34, 2.6);
+  for (let lx = T.x - 50; lx <= T.x + 50; lx += 20) { lamp(lx, -899); lamp(lx + 10, -911); }
+  for (let lz = -870; lz <= -790; lz += 20) lamp(T.x + 5.5, lz);
   // Hinterstadt: Stadtpfarrkirche St. Ulrich, Heimathaus, Franz
   church(T.x + 40, -956, 1.0, false, Y); label('Stadtpfarrkirche St. Ulrich', T.x + 40, -950, 30, 1.6);
   house(T.x + 16, -952, 10, 9, 6, 0xf2e2b0, 0x6b4a3a, 0, Y); sign('Heimathaus · Stadtmuseum', 0.8, T.x + 16, Y + 3.6, -947.3, 0);
@@ -329,7 +369,7 @@ function buildVillages(rnd) {
     if (p.lake) {
       const sh = shore(p.x, p.z);
       if (sh) {
-        steg(sh, 20);
+        steg(sh, 20); lamp(sh.x - sh.dx * 5 + sh.dz * 3, sh.z - sh.dz * 5 + sh.dx * 3);
         sailboat(sh.x + sh.dx * 26 + sh.dz * 8, sh.z + sh.dz * 26 + sh.dx * 8, rnd() * 6);
         sailboat(sh.x + sh.dx * 40 - sh.dz * 12, sh.z + sh.dz * 40 - sh.dx * 12, rnd() * 6);
         const bx = sh.x - sh.dx * 9, bz = sh.z - sh.dz * 9;
@@ -460,7 +500,7 @@ function buildTrees() {
   const rnd = mulberry(4711);
   const V = GRID + 1;
   const list = [];
-  for (let n = 0; n < 60000 && list.length < 5200; n++) {
+  for (let n = 0; n < 90000 && list.length < 7000; n++) {
     const gi = 4 + Math.floor(rnd() * (GRID - 8)), gj = 4 + Math.floor(rnd() * (GRID - 8));
     const idx = gi + gj * V;
     const h = heights[idx];
@@ -551,7 +591,21 @@ export function initWorld(scene, lowGfx) {
   scene.fog = new THREE.Fog(0x9fd6ff, 350, 2600);
   scene.background = new THREE.Color(0x9fd6ff);
 
-  water = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1500), new THREE.MeshLambertMaterial({ color: 0x35b3c9, transparent: true, opacity: 0.8 }));
+  water = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1500), new THREE.MeshPhongMaterial({ color: 0x2fb9c6, specular: 0xffffff, shininess: 120, transparent: true, opacity: 0.74 }));
+  sky = new THREE.Mesh(new THREE.SphereGeometry(4200, 24, 12), new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false, fog: false,
+    uniforms: { top: { value: new THREE.Color(0x2f7fe0) }, bottom: { value: new THREE.Color(0x9fd6ff) } },
+    vertexShader: 'varying float vh; void main(){ vh = normalize(position).y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: 'uniform vec3 top; uniform vec3 bottom; varying float vh; void main(){ float t = pow(clamp(vh, 0.0, 1.0), 0.55); gl_FragColor = vec4(mix(bottom, top, t), 1.0);\n#include <colorspace_fragment>\n}',
+  }));
+  sky.renderOrder = -10; scene.add(sky);
+  sunDisc = new THREE.Mesh(new THREE.SphereGeometry(110, 12, 8), new THREE.MeshBasicMaterial({ color: 0xfff1b8, fog: false }));
+  scene.add(sunDisc);
+  { const pts = []; const r = mulberry(5);
+    for (let i = 0; i < 700; i++) { const a = r() * 6.283, e = Math.asin(r() * 0.95 + 0.04); pts.push(Math.cos(a) * Math.cos(e) * 3900, Math.sin(e) * 3900, Math.sin(a) * Math.cos(e) * 3900); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    stars = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false }));
+    scene.add(stars); }
   water.rotation.x = -Math.PI / 2; water.position.set(-200, 0, 180);
   scene.add(water);
   for (const [ox, oz, w, d] of [[0, -HALF - 3000, 12000, 6000], [0, HALF + 3000, 12000, 6000], [-HALF - 3000, 0, 6000, HALF * 2], [HALF + 3000, 0, 6000, HALF * 2]]) {
@@ -585,6 +639,16 @@ export function updateSky(dayT, dt, center, scene) {
   sun.intensity = 0.15 + 2.2 * day;
   sun.color.setHex(0xfff1d6).lerp(cDusk, dusk * 0.6);
   hemi.intensity = 0.32 + 0.75 * day;
+  sky.position.copy(center); stars.position.copy(center);
+  sky.material.uniforms.bottom.value.copy(cTmp);
+  sky.material.uniforms.top.value.setRGB(0.03 + 0.1 * day, 0.05 + 0.3 * day, 0.14 + 0.62 * day);
+  sunDisc.position.set(center.x + dirX * 3600, center.y + el * 3600, center.z + dirZ * 3600);
+  sunDisc.visible = el > -0.06;
+  stars.material.opacity = Math.max(0, 1 - day * 1.6);
+  const nightGlow = Math.max(0, 1 - day * 1.4);
+  lam(0xbfe6ff).emissive.setRGB(1.0 * nightGlow, 0.72 * nightGlow, 0.3 * nightGlow);
+  lampMat.color.setRGB(0.5 + 0.5 * nightGlow, 0.5 + 0.42 * nightGlow, 0.45 + 0.15 * nightGlow);
+  water.material.color.setRGB(0.05 + 0.13 * day, 0.2 + 0.52 * day, 0.28 + 0.5 * day);
   if (cloudMat) cloudMat.emissive.setScalar(0.06 + 0.5 * day);
   for (const c of clouds) {
     c.position.x += dt * 4;

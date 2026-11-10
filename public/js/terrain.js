@@ -100,12 +100,12 @@ function generate() {
     const raw = pts.map((p) => getHeight(p[0], p[1]));
     pts.forEach((p, k) => {
       let s = 0, n = 0;
-      for (let q = Math.max(0, k - 6); q <= Math.min(pts.length - 1, k + 6); q++) { s += raw[q]; n++; }
+      for (let q = Math.max(0, k - 9); q <= Math.min(pts.length - 1, k + 9); q++) { s += raw[q]; n++; }
       p[2] = Math.max(0.9, s / n);
     });
     roadData.push({ road: r, pts });
   }
-  for (const rd of roadData) stamp(rd.pts, rd.road.w / 2 + 1.5, rd.road.w / 2 + 9, wBuf, vBuf);
+  for (const rd of roadData) stamp(rd.pts, rd.road.w / 2 + 2, rd.road.w / 2 + 7, wBuf, vBuf);
   for (let i = 0; i < V * V; i++) {
     if (wBuf[i] > 0) { heights[i] += (vBuf[i] - heights[i]) * wBuf[i]; if (wBuf[i] > 0.6) mask[i] = 1; }
   }
@@ -118,7 +118,7 @@ function generate() {
     stamp(pts, r.w / 2, r.w / 2 + 6, wBuf, vBuf);
   }
   for (let i = 0; i < V * V; i++) {
-    if (wBuf[i] > 0 && heights[i] > 0) {
+    if (wBuf[i] > 0 && heights[i] > 0 && mask[i] !== 1) {
       heights[i] = Math.max(0.35, heights[i] - (0.9 + vBuf[i] * 0.08) * wBuf[i]);
       if (wBuf[i] > 0.5) mask[i] = 2;
     }
@@ -177,6 +177,7 @@ export function vertexColor(i, out) {
     }
     const zn = zoneAt(x, z, 4);
     if (mask[i] === 2) { r = 0.22; g = 0.52; b = 0.78; }
+    else if (h < -0.4) { const dd = Math.min(1, -h / 8); r = 0.8 - 0.68 * dd; g = 0.8 - 0.42 * dd; b = 0.6 - 0.12 * dd; }
     else if (h < 0.7) { r = 0.86; g = 0.8; b = 0.56; }
     else if (h > 135) { r = 0.95; g = 0.96; b = 1.0; }
     else if (h > 78 || slope > 0.95) { r = 0.56; g = 0.55; b = 0.53; }

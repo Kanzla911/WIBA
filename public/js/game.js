@@ -5,7 +5,8 @@ import { ITEMS, WEAPONS, PROJ, SPAWNS, PLAYER_COLORS, DAY_LENGTH, HALF } from '.
 import { initTerrain, getHeight, applyEdits, flushTerrain, raycastTerrain, isProtected } from './terrain.js';
 import { initWorld, updateSky, boxes, pois, textSprite, mkBox } from './world.js';
 import { makeAvatar, makeItem } from './models.js';
-import { initAudio, sfx, engine } from './audio.js';
+import { initAudio, sfx, engine, ambient } from './audio.js';
+import { lakeDist, TOWN, NIXENFALL } from './geo.js';
 import * as UI from './ui.js';
 import * as C from './combat.js';
 import * as V from './vehicles.js';
@@ -707,7 +708,7 @@ function updateInteraction(dt, ctl) {
 }
 
 // ---------- Hauptschleife ----------
-let last = performance.now(), sendT = 0;
+let last = performance.now(), sendT = 0, ambT = 0;
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, Math.max(0.001, (now - last) / 1000));
@@ -768,6 +769,19 @@ function frame(now) {
   G.dayT = ((st / DAY_LENGTH) + 0.36) % 1;
   G.daylight = updateSky(G.dayT, dt, me.pos, scene);
   UI.updateHUD(dt);
+  ambT -= dt;
+  if (ambT <= 0) {
+    ambT = 0.3;
+    const p = camera.position;
+    const inTown = Math.abs(me.pos.x - TOWN.x) < 150 && Math.abs(me.pos.z - TOWN.z) < 105;
+    const ld = Math.abs(lakeDist(p.x, p.z));
+    const fall = Math.hypot(p.x - NIXENFALL.x, p.z - NIXENFALL.z + 30);
+    const wat = Math.max(p.y < 30 ? Math.max(0, 1 - ld / 45) * 0.05 : 0, Math.max(0, 1 - fall / 60) * 0.12);
+    const air = me.vehicle && V.isAir(me.vehicle);
+    ambient(inTown && !air ? 0.03 + 0.04 * G.daylight : 0, wat, Math.min(0.09, Math.max(0, (p.y - 35) / 900) + (air ? 0.05 : 0.004)));
+    if (!inTown && !air && G.daylight > 0.3 && p.y < 90 && Math.random() < 0.09) sfx.bird();
+    if (inTown && Math.random() < 0.004) sfx.bell();
+  }
 
   sendT -= dt;
   if (sendT <= 0) {

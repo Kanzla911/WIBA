@@ -197,7 +197,7 @@ function simGround(v, dt) {
     const nx = v.pos.x + sx * v.speed * dt, nz = v.pos.z + cz * v.speed * dt;
     const probe = 2.5;
     const h0 = getHeight(v.pos.x, v.pos.z), h1 = getHeight(nx + sx * probe * dir, nz + cz * probe * dir);
-    const maxSlope = isB ? 1.3 : 0.8;
+    const maxSlope = isB ? 1.3 : 1.1;
     if ((h1 - h0) / probe > maxSlope || h1 < -1.2 || boxBlocks(nx + sx * probe * dir * 0.8, nz + cz * probe * dir * 0.8, v.pos.y)) {
       if (Math.abs(v.speed) > 12) { net.send({ t: 'vdmg', id: v.id, d: Math.abs(v.speed) * 2 }); sfx.dig(); }
       v.speed = 0;
