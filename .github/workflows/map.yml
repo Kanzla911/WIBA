@@ -1,0 +1,53 @@
+name: Karte bauen (echte Daten)
+
+# Laedt OpenStreetMap + Hoehenmodell, baut public/world und committet es.
+# Danach wird WIBA.exe automatisch neu gebaut.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: wiba-map
+  cancel-in-progress: false
+
+jobs:
+  map:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Kartenbau-Test
+        run: node test/map-test.js
+
+      - name: Echte Karte laden und bauen
+        run: node tools/build-map.js --out public/world --cache .cache/map
+
+      - name: Ergebnis pruefen
+        run: |
+          du -sh public/world public/world/tiles
+          ls public/world | head -20
+          node -e "const m=require('./public/world/meta.json'); console.log(JSON.stringify(m.counts), 'Seen:', m.lakes.length, 'Kacheln:', m.tiles.length); if(!m.counts.buildings||!m.counts.roads||!m.lakes.length) process.exit(1)"
+
+      - name: Karte committen
+        run: |
+          git config user.name "WIBA Kartenbau"
+          git config user.email "actions@users.noreply.github.com"
+          git add -f public/world
+          git commit -m "Echte Karte: Voecklabruck - Attersee - Weissenbachtal (OSM + Hoehenmodell)" || echo "keine Aenderung"
+          git push
+
+      - name: WIBA.exe neu bauen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run build.yml --ref "${{ github.ref_name }}"

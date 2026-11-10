@@ -8,7 +8,9 @@
     "start": "electron .",
     "server": "node server.js",
     "dist": "electron-builder --win portable --x64 --publish never",
-    "test": "node test/smoke.js"
+    "test": "node test/smoke.js",
+    "map": "node tools/build-map.js",
+    "test:map": "node test/map-test.js"
   },
   "engines": {
     "node": ">=18"
@@ -20,7 +22,8 @@
   "author": "WIBA",
   "devDependencies": {
     "electron": "^45.2.3",
-    "electron-builder": "^26.18.0"
+    "electron-builder": "^26.18.0",
+    "pngjs": "^7.0.0"
   },
   "build": {
     "appId": "at.wiba.game",
