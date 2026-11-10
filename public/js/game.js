@@ -24,10 +24,12 @@ const canvas = $('game');
 const _d = new THREE.Vector3(), _r = new THREE.Vector3(), _u = new THREE.Vector3(), _m = new THREE.Vector3(), _p = new THREE.Vector3();
 
 // ---------- Renderer ----------
-let lowGfx = false;
-try { lowGfx = localStorage.getItem('wiba-gfx') === 'low'; } catch (e) { /* */ }
+let gfx = 'high';
+try { gfx = localStorage.getItem('wiba-gfx') || 'high'; } catch (e) { /* */ }
+if (gfx !== 'low' && gfx !== 'mid') gfx = 'high';
+const lowGfx = gfx === 'low';
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !lowGfx, powerPreference: 'high-performance' });
-renderer.setPixelRatio(lowGfx ? 0.8 : Math.min(window.devicePixelRatio || 1, 2));
+renderer.setPixelRatio(lowGfx ? 0.8 : Math.min(window.devicePixelRatio || 1, gfx === 'mid' ? 1.25 : 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = !lowGfx;
 renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -43,7 +45,7 @@ let composer = null, aoPass = null;
 let gfxAO = true;
 try { gfxAO = localStorage.getItem('wiba-ao') !== 'off'; } catch (e) { /* */ }
 function initPost() {
-  if (lowGfx || composer) return;
+  if (gfx !== 'high' || composer) return;
   try {
     const pr = renderer.getPixelRatio(), w = window.innerWidth, h = window.innerHeight;
     composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(w * pr, h * pr, { type: THREE.HalfFloatType, samples: 4 }));
@@ -137,9 +139,9 @@ PLAYER_COLORS.forEach((c) => {
   $('colors').appendChild(d);
 });
 function status(t) { $('status').textContent = t; }
-$('btnGfx').textContent = '🖥️ Grafik: ' + (lowGfx ? 'Niedrig (schneller)' : 'Hoch');
+$('btnGfx').textContent = '🖥️ Grafik: ' + { low: 'Niedrig (am schnellsten)', mid: 'Mittel', high: 'Hoch (Schatten, Gras, Verdeckung, Leuchten)' }[gfx];
 $('btnGfx').onclick = () => {
-  try { localStorage.setItem('wiba-gfx', lowGfx ? 'high' : 'low'); } catch (e) { /* */ }
+  try { localStorage.setItem('wiba-gfx', { high: 'mid', mid: 'low', low: 'high' }[gfx]); } catch (e) { /* */ }
   me.name = ($('name').value.trim() || me.name).slice(0, 16);
   saveGame();
   location.reload();

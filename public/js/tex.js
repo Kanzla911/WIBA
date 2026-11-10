@@ -72,6 +72,32 @@ const DEF = {
     c.fillStyle = '#f6f6f6'; c.fillRect(x + w / 2 - 2, y, 4, h); c.fillRect(x, y + h * 0.36, w, 3);
     c.fillStyle = '#d9d5cc'; c.fillRect(x - 10, y + h + 6, w + 20, 7);
   }),
+  // Erdgeschoss: zwei Felder (Tuer | Schaufenster/Fenster), Sockel unten
+  facadeG: () => make(512, (c, s) => {
+    const H = s / 2; c.fillStyle = '#f1f1f1'; c.fillRect(0, 0, s, s); speckle(c, s, 6000, 180, 255, 0.16, 2);
+    for (const y0 of [0, H]) {
+      c.fillStyle = 'rgba(0,0,0,0.3)'; c.fillRect(0, y0 + H * 0.86, s, H * 0.14);
+      c.fillStyle = 'rgba(0,0,0,0.12)'; c.fillRect(0, y0, s, 5);
+      // Tuer
+      const dx = s * 0.17, dw = s * 0.16, dy = y0 + H * 0.2, dh = H * 0.66;
+      c.fillStyle = '#ffffff'; c.fillRect(dx - 7, dy - 7, dw + 14, dh + 7);
+      const g = c.createLinearGradient(dx, 0, dx + dw, 0); g.addColorStop(0, y0 ? '#5b3a22' : '#3d4a3f'); g.addColorStop(1, y0 ? '#3f2817' : '#27332b');
+      c.fillStyle = g; c.fillRect(dx, dy, dw, dh);
+      c.fillStyle = 'rgba(0,0,0,0.3)'; c.fillRect(dx + 8, dy + 10, dw - 16, dh * 0.42); c.fillRect(dx + 8, dy + dh * 0.52, dw - 16, dh * 0.4);
+      c.fillStyle = '#d8c070'; c.fillRect(dx + dw - 14, dy + dh * 0.5, 6, 10);
+      // Fenster / Auslage
+      const wx = s * 0.58, ww = s * (y0 ? 0.34 : 0.22), wy = y0 + H * (y0 ? 0.2 : 0.26), wh = H * (y0 ? 0.56 : 0.46);
+      c.fillStyle = '#ffffff'; c.fillRect(wx - 7, wy - 7, ww + 14, wh + 14);
+      const g2 = c.createLinearGradient(wx, wy, wx + ww, wy + wh); g2.addColorStop(0, '#2c3a4a'); g2.addColorStop(0.5, '#5a7186'); g2.addColorStop(1, '#1e2833');
+      c.fillStyle = g2; c.fillRect(wx, wy, ww, wh);
+      c.fillStyle = 'rgba(255,255,255,0.2)'; c.beginPath(); c.moveTo(wx, wy + wh * 0.6); c.lineTo(wx + ww * 0.5, wy); c.lineTo(wx + ww * 0.75, wy); c.lineTo(wx, wy + wh * 0.9); c.fill();
+      if (y0) { c.fillStyle = '#b8402e'; c.fillRect(wx - 12, wy - 26, ww + 24, 16); }
+    }
+  }),
+  facadeGGlow: () => make(512, (c, s) => {
+    const H = s / 2; c.fillStyle = '#000'; c.fillRect(0, 0, s, s);
+    for (const y0 of [0, H]) { const wx = s * 0.58, ww = s * (y0 ? 0.34 : 0.22), wy = y0 + H * (y0 ? 0.2 : 0.26), wh = H * (y0 ? 0.56 : 0.46); c.fillStyle = y0 ? '#ffe2a0' : '#e0a85a'; c.fillRect(wx, wy, ww, wh); }
+  }),
   facadeGlow: () => make(256, (c, s) => {
     c.fillStyle = '#000'; c.fillRect(0, 0, s, s);
     const x = s * 0.31, y = s * 0.24, w = s * 0.38, h = s * 0.5;

@@ -247,6 +247,7 @@ function meshOf(B, material, shadow) {
 }
 
 // ---------- Gebaeude ----------
+const wallMatG = new THREE.MeshLambertMaterial({ vertexColors: true, map: tex('facadeG'), emissiveMap: tex('facadeGGlow'), emissive: 0xffffff, emissiveIntensity: 0, side: THREE.DoubleSide });
 const wallMat = new THREE.MeshLambertMaterial({ vertexColors: true, map: tex('facade'), emissiveMap: tex('facadeGlow'), emissive: 0xffffff, emissiveIntensity: 0, side: THREE.DoubleSide });
 const roofMat = new THREE.MeshLambertMaterial({ vertexColors: true, map: tex('roof'), side: THREE.DoubleSide });
 const WALLS = [[0.97, 0.95, 0.9], [0.96, 0.9, 0.78], [0.93, 0.86, 0.8], [0.88, 0.92, 0.86], [0.98, 0.97, 0.95], [0.9, 0.9, 0.94], [0.95, 0.84, 0.76], [0.99, 0.94, 0.82]];
@@ -285,7 +286,12 @@ function addBuilding(b, ox, oz, W, Rf, polys) {
     if (len < 0.05) continue;
     const bays = small ? 0 : Math.max(1, Math.round(len / 3.4));
     if (small) quad(W, [a[0], base - 2, a[1]], [c[0], base - 2, c[1]], [c[0], top, c[1]], [a[0], top, a[1]], wcol, PLAIN[0], PLAIN[1], PLAIN[0], PLAIN[1]);
-    else quad(W, [a[0], base - 2, a[1]], [c[0], base - 2, c[1]], [c[0], top, c[1]], [a[0], top, a[1]], wcol, 0, -2 / (h / floors), bays, floors);
+    else {
+      // Erdgeschoss (Tueren/Auslagen) getrennt von den Obergeschossen
+      const gh = h / floors, vr = hs > 0.5 ? 0.5 : 0, ub = Math.max(1, Math.round(bays / 2));
+      quad(W.g, [a[0], base - 2, a[1]], [c[0], base - 2, c[1]], [c[0], base + gh, c[1]], [a[0], base + gh, a[1]], wcol, 0, vr, ub, vr + 0.5);
+      if (floors > 1) quad(W, [a[0], base + gh, a[1]], [c[0], base + gh, c[1]], [c[0], top, c[1]], [a[0], top, a[1]], wcol, 0, 0, bays, floors - 1);
+    }
   }
   let rf = b[2];
   if (!rf) rf = (kind === 2 || kind === 3) && area > 220 ? 3 : (n === 4 ? 1 : (area > 900 ? 3 : 2));
@@ -335,6 +341,7 @@ const roadMats = {
   gravel: new THREE.MeshLambertMaterial({ color: 0xb7a98a, map: tex('asphalt'), polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
   paving: new THREE.MeshLambertMaterial({ color: 0xcbbfa6, map: tex('asphalt'), polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
   rail: new THREE.MeshLambertMaterial({ color: 0x7c7468, map: tex('asphalt'), polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
+  walk: new THREE.MeshLambertMaterial({ color: 0xc9c5bb, map: tex('asphalt'), polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }),
   line: new THREE.MeshLambertMaterial({ color: 0xf2f2f2, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }),
   steel: new THREE.MeshLambertMaterial({ color: 0x33343a, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }),
   water: new THREE.MeshLambertMaterial({ color: 0x3d8fb3, transparent: true, opacity: 0.85, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }),
@@ -367,6 +374,13 @@ function strip(B, pts, w, off, yfn, lift) {
     pl = L; pr = Rr; pv = v;
   }
 }
+const lampGeo = (() => {
+  const pole = new THREE.CylinderGeometry(0.06, 0.09, 6.2, 8).translate(0, 3.1, 0).toNonIndexed();
+  const arm = new THREE.CylinderGeometry(0.04, 0.04, 1.5, 6).rotateX(Math.PI / 2).translate(0, 6.15, 0.7).toNonIndexed();
+  const P = [...pole.attributes.position.array, ...arm.attributes.position.array], N = [...pole.attributes.normal.array, ...arm.attributes.normal.array];
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+  return { pole: g, poleMat: new THREE.MeshLambertMaterial({ color: 0x4a4e55 }), bulb: new THREE.SphereGeometry(0.2, 10, 8).scale(1.3, 0.55, 1.9).translate(0, 6.08, 1.35) };
+})();
 const RGROUP = ['asphalt', 'asphalt', 'asphalt', 'asphalt', 'asphalt', 'asphalt', 'asphalt', 'gravel', 'paving', 'rail', 'asphalt', 'asphalt'];
 function addRoad(r, ox, oz, G, T) {
   const cls = r[0], w = r[1] / 10, bridge = r[2];
@@ -389,6 +403,15 @@ function addRoad(r, ox, oz, G, T) {
     for (const sg of [-1, 1]) strip(G.line, pts, 0.18, sg * (w / 2 + 0.25), yfn, 0.9);
   }
   strip(G[RGROUP[cls]], pts, w, 0, yfn, lift);
+  // Gehsteige und Laternen im Ortsgebiet
+  if (cls >= 2 && cls <= 5 && !bridge && landuseAt(raw[0][0], raw[0][1]) === 3 && landuseAt(raw[raw.length - 1][0], raw[raw.length - 1][1]) === 3) {
+    for (const sg of [-1, 1]) strip(G.walk, pts, 1.7, sg * (w / 2 + 0.85), yfn, lift + 0.1);
+    for (let i = 3; i < pts.length - 1; i += 8) {
+      const a = pts[i - 1], b = pts[i + 1]; let dx = b[0] - a[0], dz = b[1] - a[1]; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+      const sd = (Math.floor(pts[i][0] + pts[i][1]) & 1) ? 1 : -1, lx = pts[i][0] + dz * sd * (w / 2 + 1.4), lz = pts[i][1] - dx * sd * (w / 2 + 1.4);
+      if (hash2(Math.round(lx / 30), Math.round(lz / 30)) < 0.75) T.lamps.push([lx, getHeight(lx, lz), lz, Math.atan2(-dz * sd, dx * sd) + Math.PI / 2]);
+    }
+  }
   if (cls === 9) { for (const sg of [-1, 1]) strip(G.steel, pts, 0.14, sg * 0.72, yfn, lift + 0.12); }
   else if (cls === 0) { for (const sg of [-1, 1]) strip(G.line, pts, 0.25, sg * (w / 2 - 0.5), yfn, lift + 0.05); }
   else if (cls <= 4 || cls === 10) strip(G.line, pts, 0.16, 0, yfn, lift + 0.05);
@@ -501,13 +524,21 @@ function loadTileData(T) {
 }
 function buildTileObjects(T) {
   const ox = T.tx * TILE, oz = T.tz * TILE, d = T.data;
-  const W = Buf(), Rf = Buf(), G = { asphalt: Buf(), gravel: Buf(), paving: Buf(), rail: Buf(), line: Buf(), steel: Buf(), water: Buf() };
+  const W = Buf(), Rf = Buf(); W.g = Buf(); T.lamps = [];
+  const G = { asphalt: Buf(), gravel: Buf(), paving: Buf(), rail: Buf(), line: Buf(), steel: Buf(), water: Buf(), walk: Buf() };
   T.group = new THREE.Group(); T.group.matrixAutoUpdate = false;
   if (d.r) for (const r of d.r) addRoad(r, ox, oz, G, T);
   if (d.w) for (const w of d.w) addWater(w, ox, oz, G);
   if (d.b) for (const b of d.b) addBuilding(b, ox, oz, W, Rf, T.polys);
-  for (const [B, mat, sh] of [[W, wallMat, true], [Rf, roofMat, true], ...Object.keys(G).map((k) => [G[k], roadMats[k], false])]) {
+  for (const [B, mat, sh] of [[W, wallMat, true], [W.g, wallMatG, true], [Rf, roofMat, true], ...Object.keys(G).map((k) => [G[k], roadMats[k], false])]) {
     const m = meshOf(B, mat, sh); if (m) T.group.add(m);
+  }
+  if (T.lamps.length) {
+    const n = Math.min(T.lamps.length, 160), mm = new THREE.Matrix4();
+    const poles = new THREE.InstancedMesh(lampGeo.pole, lampGeo.poleMat, n), bulbs = new THREE.InstancedMesh(lampGeo.bulb, lampMat, n);
+    for (let i = 0; i < n; i++) { const l = T.lamps[i]; mm.makeRotationY(l[3]); mm.setPosition(l[0], l[1], l[2]); poles.setMatrixAt(i, mm); bulbs.setMatrixAt(i, mm); }
+    poles.castShadow = true; poles.computeBoundingSphere(); bulbs.computeBoundingSphere();
+    T.group.add(poles); T.group.add(bulbs);
   }
   sceneRef.add(T.group);
   T.state = 2;
@@ -802,7 +833,8 @@ export function updateSky(dayT, dt, center, scene) {
     if (c.position.x - center.x > 12000) c.position.x -= 24000; else if (c.position.x - center.x < -12000) c.position.x += 24000;
     if (c.position.z - center.z > 12000) c.position.z -= 24000; else if (c.position.z - center.z < -12000) c.position.z += 24000;
   }
-  wallMat.emissiveIntensity = nightGlow * 0.9;
+  wallMat.emissiveIntensity = nightGlow * 0.9; wallMatG.emissiveIntensity = nightGlow * 1.1;
+  lampMat.color.setRGB(0.75 + 3.2 * nightGlow, 0.75 + 2.6 * nightGlow, 0.7 + 1.2 * nightGlow);
   scene.environmentIntensity = 0.08 + 0.75 * day;
   return day;
 }
