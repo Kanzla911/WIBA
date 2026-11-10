@@ -663,7 +663,7 @@ class GTAOPass extends Pass {
 
 		scene.traverse( function ( object ) {
 
-			if ( ( object.isPoints || object.isLine || object.isLine2 || object.isSprite || ( object.material && ( object.material.transparent === true || object.material.depthWrite === false ) ) ) && object.visible ) { // WIBA: auch Sprites/Transparentes von der Verdeckung ausnehmen
+			if ( ( object.isPoints || object.isLine || object.isLine2 || object.isSprite || ( object.material && ( object.material.transparent === true || object.material.depthWrite === false || object.material.alphaTest > 0 ) ) ) && object.visible ) { // WIBA: auch Sprites/Transparentes von der Verdeckung ausnehmen
 
 				object.visible = false;
 				cache.push( object );

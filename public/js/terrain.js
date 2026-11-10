@@ -178,14 +178,16 @@ function colorAt(x, z, h, slope, out) {
     if (f < 0.25) { r = 0.74; g = 0.66; b = 0.34; } else if (f < 0.45) { r = 0.5; g = 0.62; b = 0.25; } else if (f < 0.58) { r = 0.56; g = 0.46; b = 0.3; } else { r = 0.4; g = 0.6; b = 0.26; }
     r += (n - 0.5) * 0.05; g += (n - 0.5) * 0.05;
   }
-  else if (lu === 3) { r = 0.47 + 0.08 * n; g = 0.56 + 0.07 * n; b = 0.34 + 0.04 * n; }
+  else if (lu === 3) { const gdn = vnoise(x / 14 + 3, z / 14 + 8); if (gdn > 0.56) { r = 0.36 + 0.08 * n; g = 0.55 + 0.08 * n; b = 0.24; } else { r = 0.6 + 0.06 * n; g = 0.585 + 0.06 * n; b = 0.55 + 0.05 * n; } }
   else if (lu === 7) { r = 0.62; g = 0.55; b = 0.44; }
   else if (lu === 8) { r = 0.3 + 0.08 * n; g = 0.45 + 0.08 * n; b = 0.2; }
   else if (lu === 9) { r = 0.36; g = 0.48; b = 0.3; }
   else if (lu === 10) { r = 0.36 + 0.06 * n; g = 0.62 + 0.06 * n; b = 0.26; }
   else { const k = Math.min(1, Math.max(0, (elev - 900) / 800)); r = 0.38 + 0.12 * n - 0.06 * k; g = 0.6 + 0.08 * n - 0.12 * k; b = 0.22 + 0.04 * n; }
   if (slope > 0.75 && lu !== 4) { const k = Math.min(1, (slope - 0.75) / 0.3); r += (0.56 - r) * k; g += (0.55 - g) * k; b += (0.52 - b) * k; }
-  out[0] = r; out[1] = g; out[2] = b;
+  // etwas kraeftigere Farben (die Filmic-Belichtung nimmt Saettigung weg)
+  const mid = (r + g + b) / 3;
+  out[0] = mid + (r - mid) * 1.28; out[1] = mid + (g - mid) * 1.28; out[2] = mid + (b - mid) * 1.28;
 }
 const DIRT = [0.43, 0.29, 0.17];
 

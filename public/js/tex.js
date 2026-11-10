@@ -79,6 +79,43 @@ const DEF = {
     c.fillStyle = g; c.fillRect(x, y, w, h);
     c.fillStyle = '#000'; c.fillRect(x + w / 2 - 2, y, 4, h); c.fillRect(x, y + h * 0.36, w, 3);
   }),
+  leaves: () => make(256, (c, s) => {
+    c.clearRect(0, 0, s, s);
+    for (let i = 0; i < 420; i++) {
+      const a = rnd() * 6.283, d = Math.pow(rnd(), 0.6) * s * 0.46, x = s / 2 + Math.cos(a) * d, y = s / 2 + Math.sin(a) * d * 0.9;
+      const v = 120 + rnd() * 135, w = 7 + rnd() * 9;
+      c.fillStyle = `rgb(${v * 0.95 | 0},${v | 0},${v * 0.8 | 0})`;
+      c.save(); c.translate(x, y); c.rotate(rnd() * 6.283); c.beginPath(); c.ellipse(0, 0, w, w * 0.45, 0, 0, 6.283); c.fill();
+      c.strokeStyle = 'rgba(0,0,0,0.18)'; c.beginPath(); c.moveTo(-w, 0); c.lineTo(w, 0); c.stroke(); c.restore();
+    }
+  }, false),
+  fir: () => make(256, (c, s) => {
+    c.clearRect(0, 0, s, s);
+    for (let b = 0; b < 15; b++) {
+      const y0 = s * (0.06 + b * 0.06), len = s * (0.07 + b * 0.029);
+      for (const dir of [-1, 1]) {
+        for (let k = 0; k < 40; k++) {
+          const t = k / 40, x = s / 2 + dir * t * len, y = y0 + t * s * 0.07 + (rnd() - 0.5) * 5;
+          const v = 110 + rnd() * 140; c.strokeStyle = `rgb(${v * 0.85 | 0},${v | 0},${v * 0.8 | 0})`; c.lineWidth = 3.2;
+          c.beginPath(); c.moveTo(x, y); c.lineTo(x + dir * 5 + (rnd() - 0.5) * 6, y + 9 + rnd() * 9); c.stroke();
+          c.beginPath(); c.moveTo(x, y); c.lineTo(x + dir * 3, y - 5 - rnd() * 5); c.stroke();
+        }
+      }
+    }
+    c.fillStyle = 'rgb(120,105,85)'; c.fillRect(s / 2 - 3, s * 0.08, 6, s * 0.9);
+  }, false),
+  grass: () => make(128, (c, s) => {
+    c.clearRect(0, 0, s, s);
+    for (let i = 0; i < 46; i++) {
+      const x = s * (0.08 + rnd() * 0.84), h = s * (0.35 + rnd() * 0.6), lean = (rnd() - 0.5) * s * 0.3, w = 2.5 + rnd() * 3.5, v = 150 + rnd() * 105;
+      c.fillStyle = `rgb(${v * 0.9 | 0},${v | 0},${v * 0.62 | 0})`;
+      c.beginPath(); c.moveTo(x - w, s); c.quadraticCurveTo(x + lean * 0.3, s - h * 0.6, x + lean, s - h); c.quadraticCurveTo(x + lean * 0.4 + w, s - h * 0.5, x + w, s); c.fill();
+    }
+  }, false),
+  bark: () => make(128, (c, s) => {
+    c.fillStyle = '#b8b8b8'; c.fillRect(0, 0, s, s);
+    for (let i = 0; i < 260; i++) { const v = 60 + rnd() * 150; c.fillStyle = `rgba(${v},${v},${v},0.5)`; c.fillRect(rnd() * s, rnd() * s, 2 + rnd() * 3, 8 + rnd() * 30); }
+  }),
   cloud: () => make(256, (c, s) => {
     for (let i = 0; i < 16; i++) {
       const x = s * (0.22 + rnd() * 0.56), y = s * (0.38 + rnd() * 0.26), r = s * (0.12 + rnd() * 0.14);
@@ -87,4 +124,8 @@ const DEF = {
     }
   }, false),
 };
-export function tex(name) { if (!cache[name]) cache[name] = DEF[name](); return cache[name]; }
+const NOMIP = { leaves: 1, fir: 1, grass: 1 };
+export function tex(name) {
+  if (!cache[name]) { const t = DEF[name](); if (NOMIP[name]) { t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; } cache[name] = t; }
+  return cache[name];
+}

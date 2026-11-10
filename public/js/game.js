@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { G, net, clamp, invAdd, invCount } from './state.js';
 import { ITEMS, WEAPONS, PROJ, PLAYER_COLORS, DAY_LENGTH } from './config.js';
 import { M, loadWorld, applyAirfield, initTerrain, updateTerrain, getHeight, applyEdits, flushTerrain, raycastTerrain, isProtected, waterLevelAt, inWorld, landuseAt } from './terrain.js';
-import { initWorld, updateSky, boxes, pois, textSprite, mkBox, polyAt, surfaceAt, updateObjects, updateMarkers } from './world.js';
+import { initWorld, updateSky, boxes, pois, textSprite, mkBox, polyAt, surfaceAt, updateObjects, updateMarkers, updateGrass } from './world.js';
 import { makeAvatar, makeItem } from './models.js';
 import { initAudio, sfx, engine, ambient } from './audio.js';
 import * as UI from './ui.js';
@@ -834,6 +834,7 @@ function frame(now) {
   const tpend = updateTerrain(sx, sz, G.spawnPending ? 40 : 5);
   if (G.spawnPending) { G.spawnPending += dt; if ((!pend && !tpend) || G.spawnPending > 25) finishSpawn(); }
   updateMarkers(sx, sz, dt);
+  updateGrass(sx, sz, camera.position.y - getHeight(camera.position.x, camera.position.z), !pend && !G.spawnPending);
   updateNpcs(dt, !pend);
   const st = G.serverTimeOffset + now / 1000;
   G.dayT = ((st / DAY_LENGTH) + 0.36) % 1;

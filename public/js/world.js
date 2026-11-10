@@ -408,24 +408,39 @@ function addWater(wv, ox, oz, G) {
 // ---------- Baeume ----------
 let treeGeo = null;
 function initTreeGeo() {
-  const merge = (parts) => {
-    const P = [], N = [];
-    for (const [g0, x, y, z, s] of parts) {
-      const g = g0.index ? g0.toNonIndexed() : g0, a = g.attributes.position.array, nn = g.attributes.normal.array;
-      for (let i = 0; i < a.length; i += 3) { P.push(a[i] * s + x, a[i + 1] * s + y, a[i + 2] * s + z); N.push(nn[i], nn[i + 1], nn[i + 2]); }
+  // Blattwerk aus Karten (Flaechen mit Blatt-Textur), Normalen zeigen nach aussen -> weiches Licht
+  const cards = (list) => {
+    const P = [], N = [], U = [];
+    for (const [cx, cy, cz, w, h, ry, tilt] of list) {
+      const c = Math.cos(ry), sn = Math.sin(ry), ct = Math.cos(tilt), st = Math.sin(tilt);
+      const pt = (u, v) => { const lx = (u - 0.5) * w, ly = (v - 0.5) * h * ct, lz = (v - 0.5) * h * st; return [cx + lx * c + lz * sn, cy + ly, cz - lx * sn + lz * c]; };
+      const q = [pt(0, 0), pt(1, 0), pt(1, 1), pt(0, 1)];
+      const nl = Math.hypot(cx, cy * 0.4 + 1.5, cz) || 1, n = [cx / nl, (cy * 0.4 + 1.5) / nl, cz / nl];
+      for (const i of [0, 1, 2, 0, 2, 3]) { P.push(...q[i]); N.push(...n); U.push(i === 1 || i === 2 ? 1 : 0, i >= 2 ? 1 : 0); }
     }
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+    g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2));
     return g;
   };
-  const ib = new THREE.IcosahedronGeometry(1, 1);
+  const rn = (i) => hash2(i * 13 + 5, i * 7 + 11);
+  const broad = [], fir = [];
+  for (let i = 0; i < 22; i++) {
+    const a = rn(i) * 6.283, e = rn(i + 50) * 1.9 - 0.5, r = 1.2 + rn(i + 99) * 1.9;
+    broad.push([Math.cos(a) * Math.cos(e) * r, Math.sin(e) * r * 0.85, Math.sin(a) * Math.cos(e) * r, 3.4 + rn(i + 7) * 1.6, 3.2 + rn(i + 9) * 1.4, rn(i + 21) * 6.283, (rn(i + 33) - 0.5) * 1.2]);
+  }
+  for (let i = 0; i < 4; i++) fir.push([0, 6.2, 0, 6.4, 11.5, (i * Math.PI) / 4, 0]);
+  for (let i = 0; i < 6; i++) { const a = rn(i + 70) * 6.283, y = 2.6 + i * 1.25, w = 5.4 - i * 0.75; fir.push([Math.cos(a) * 0.3, y, Math.sin(a) * 0.3, w, w, a, 1.45]); }
+  const translated = (g, y) => { g.translate(0, y, 0); return g; };
   treeGeo = {
-    conifer: merge([[new THREE.CylinderGeometry(0.22, 0.4, 3, 5), 0, 1.5, 0, 1], [new THREE.ConeGeometry(2.6, 4.2, 7), 0, 4.4, 0, 1], [new THREE.ConeGeometry(2.0, 3.8, 7), 0, 6.8, 0, 1], [new THREE.ConeGeometry(1.3, 3.6, 7), 0, 9.2, 0, 1]]),
-    broad: merge([[new THREE.CylinderGeometry(0.28, 0.45, 3.4, 5), 0, 1.7, 0, 1], [ib, 0, 5.2, 0, 2.6], [ib, 1.6, 5.9, 0.5, 1.9], [ib, -1.4, 5.7, -0.9, 2.0], [ib, 0.2, 7.2, 0.3, 1.9]]),
+    trunkC: translated(new THREE.CylinderGeometry(0.14, 0.34, 9.5, 7), 4.75), trunkB: translated(new THREE.CylinderGeometry(0.24, 0.46, 4.6, 8), 2.3),
+    leafC: cards(fir), leafB: translated(cards(broad), 6.0),
     farC: new THREE.ConeGeometry(2.6, 11, 5).translate(0, 6.2, 0),
     farB: new THREE.IcosahedronGeometry(3.3, 0).translate(0, 5.6, 0),
   };
-  treeGeo.mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const lm = (name) => new THREE.MeshLambertMaterial({ color: 0xffffff, map: tex(name), alphaTest: 0.4, side: THREE.DoubleSide });
+  const dm = (name) => new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: tex(name), alphaTest: 0.4 });
+  treeGeo.matLeafB = lm('leaves'); treeGeo.matLeafC = lm('fir'); treeGeo.depB = dm('leaves'); treeGeo.depC = dm('fir');
+  treeGeo.matBark = new THREE.MeshLambertMaterial({ color: 0x6a5240, map: tex('bark') });
   treeGeo.matFlat = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
 }
 function buildTrees(T, near) {
@@ -452,20 +467,24 @@ function buildTrees(T, near) {
   if (!list.length) return [];
   const cons = list.filter((t) => t[4]), brs = list.filter((t) => !t[4]);
   const out = [], m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), col = new THREE.Color(), up = new THREE.Vector3(0, 1, 0);
-  const mk = (arr, geo, mat, hue, sat, lig) => {
+  const mk = (arr, geo, mat, hue, sat, lig, dep) => {
     if (!arr.length) return;
     const im = new THREE.InstancedMesh(geo, mat, arr.length);
+    if (dep) im.customDepthMaterial = dep;
     arr.forEach((t, i) => {
       q.setFromAxisAngle(up, t[5] * 6.28); s.set(t[3], t[3] * (0.85 + t[5] * 0.4), t[3]);
       m.compose(p.set(t[0], t[1] - 0.2, t[2]), q, s); im.setMatrixAt(i, m);
-      im.setColorAt(i, col.setHSL(hue + t[5] * 0.05, sat, lig + t[5] * 0.08));
+      if (hue >= 0) im.setColorAt(i, col.setHSL(hue + t[5] * 0.05, sat, lig + t[5] * 0.08)); else im.setColorAt(i, col.setScalar(0.8 + t[5] * 0.3));
     });
     im.castShadow = near; im.receiveShadow = false;
     im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true;
     im.computeBoundingSphere();
     out.push(im);
   };
-  if (near) { mk(cons, treeGeo.conifer, treeGeo.mat, 0.33, 0.42, 0.16); mk(brs, treeGeo.broad, treeGeo.mat, 0.25, 0.46, 0.27); }
+  if (near) {
+    mk(cons, treeGeo.trunkC, treeGeo.matBark, -1); mk(cons, treeGeo.leafC, treeGeo.matLeafC, 0.34, 0.5, 0.3, treeGeo.depC);
+    mk(brs, treeGeo.trunkB, treeGeo.matBark, -1); mk(brs, treeGeo.leafB, treeGeo.matLeafB, 0.26, 0.55, 0.42, treeGeo.depB);
+  }
   else { mk(cons, treeGeo.farC, treeGeo.matFlat, 0.33, 0.4, 0.15); mk(brs, treeGeo.farB, treeGeo.matFlat, 0.25, 0.42, 0.25); }
   return out;
 }
@@ -537,6 +556,57 @@ export function updateObjects(cx, cz, budgetMs = 6) {
   }
   if (!work) objQueue = objQueue.length ? objQueue : [];
   return pendingNear;
+}
+
+export function nearRoad(x, z) {
+  const T = objTiles.get(Math.floor(x / TILE) + '_' + Math.floor(z / TILE));
+  return !!(T && T.roadCells.has(Math.floor(x / 5) * 100003 + Math.floor(z / 5)));
+}
+
+// ---------- Gras rund um den Spieler ----------
+let grass = null, grassX = 1e9, grassZ = 1e9;
+const GRASS_N = 16000, GRASS_STEP = 1.25, GRASS_R = 78;
+export function updateGrass(cx, cz, agl, ready) {
+  if (RN === 0) return; // niedrige Grafik: kein Gras
+  if (!grass) {
+    const P = [], U = [], N = [];
+    for (let k = 0; k < 3; k++) {
+      const a = (k * Math.PI) / 3, c = Math.cos(a) * 0.55, sn = Math.sin(a) * 0.55;
+      const q = [[-c, 0, -sn], [c, 0, sn], [c, 0.42, sn], [-c, 0.42, -sn]], uv = [[0, 0], [1, 0], [1, 1], [0, 1]];
+      for (const i of [0, 1, 2, 0, 2, 3]) { P.push(...q[i]); U.push(...uv[i]); N.push(0, 1, 0); }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+    grass = new THREE.InstancedMesh(g, new THREE.MeshLambertMaterial({ color: 0xffffff, map: tex('grass'), alphaTest: 0.35, side: THREE.DoubleSide }), GRASS_N);
+    grass.frustumCulled = false; grass.receiveShadow = true; grass.count = 0;
+    grass.setColorAt(0, new THREE.Color(1, 1, 1));
+    sceneRef.add(grass);
+  }
+  if (agl > 120) { grass.visible = false; return; }
+  grass.visible = true;
+  if (!ready || Math.hypot(cx - grassX, cz - grassZ) < 9) return;
+  grassX = cx; grassZ = cz;
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
+  let n = 0;
+  const i0 = Math.floor((cx - GRASS_R) / GRASS_STEP), i1 = Math.floor((cx + GRASS_R) / GRASS_STEP), j0 = Math.floor((cz - GRASS_R) / GRASS_STEP), j1 = Math.floor((cz + GRASS_R) / GRASS_STEP);
+  for (let j = j0; j <= j1 && n < GRASS_N; j++) for (let i = i0; i <= i1 && n < GRASS_N; i++) {
+    const h1 = hash2(i, j);
+    const x = (i + h1) * GRASS_STEP, z = (j + hash2(i + 911, j)) * GRASS_STEP;
+    const d = Math.hypot(x - cx, z - cz);
+    if (d > GRASS_R || h1 < (d / GRASS_R) * 0.75) continue; // nach aussen ausduennen
+    const lu = landuseAt(x, z);
+    if (lu === 4 || lu === 5 || lu === 6 || lu === 7 || (lu === 2 && h1 > 0.5) || (lu === 1 && h1 > 0.45)) continue;
+    if (nearRoad(x, z) || polyAt(x, z, 0.6)) continue;
+    const y = getHeight(x, z);
+    if (y + M.meta.yoff > 1650) continue;
+    const sc = (lu === 2 ? 1.2 : 0.55) + h1 * 0.6;
+    q.setFromAxisAngle(up, h1 * 6.283); s.set(sc, sc * (0.7 + hash2(i, j + 77) * 0.8), sc);
+    m.compose(p.set(x, y - 0.03, z), q, s); grass.setMatrixAt(n, m);
+    const t = hash2(i + 5, j + 3);
+    if (lu === 2) col.setRGB(0.62 + t * 0.2, 0.6 + t * 0.15, 0.25); else col.setRGB(0.36 + t * 0.12, 0.56 + t * 0.14, 0.2 + t * 0.06);
+    grass.setColorAt(n, col); n++;
+  }
+  grass.count = n; grass.instanceMatrix.needsUpdate = true; if (grass.instanceColor) grass.instanceColor.needsUpdate = true;
 }
 
 // ---------- POIs, Beschriftungen, Flugplatz ----------
@@ -710,9 +780,9 @@ export function updateSky(dayT, dt, center, scene) {
   const dirX = Math.cos(ang) * 0.9, dirZ = 0.35;
   sun.position.set(center.x + dirX * 220, center.y + sy * 220, center.z + dirZ * 220);
   sun.target.position.copy(center);
-  sun.intensity = 0.12 + 3.1 * day;
+  sun.intensity = 0.12 + 3.5 * day;
   sun.color.setHex(0xfff1d6).lerp(cDusk, dusk * 0.6);
-  hemi.intensity = 0.3 + 1.0 * day;
+  hemi.intensity = 0.26 + 0.72 * day;
   sky.position.copy(center); stars.position.copy(center);
   sky.material.uniforms.bottom.value.copy(cTmp);
   sky.material.uniforms.top.value.setRGB(0.03 + 0.1 * day, 0.05 + 0.3 * day, 0.14 + 0.62 * day);
