@@ -8,7 +8,7 @@ let win = null;
 let srv = null;
 
 async function boot() {
-  const saveFile = path.join(app.getPath('userData'), 'world-save.json');
+  const saveFile = path.join(app.getPath('userData'), 'world-save-v2.json');
   try {
     srv = await startServer({ port: 31337, saveFile });
   } catch (e) {

@@ -7,6 +7,7 @@ import { rayBoxes, pointInBoxes, addBox, removeBox, mkBox, lam } from './world.j
 import { makeProjectile } from './models.js';
 import { sfx } from './audio.js';
 import { toast, toastOnce, hitmark } from './ui.js';
+import { hitNpc, alarmNpcs } from './npc.js';
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3();
 let nextProj = 1;
@@ -130,6 +131,13 @@ export function fireHitscan(o, d, range, dmg, opt = {}) {
     if (th >= 0 && (t < 0 || th <= t)) { t = th; isHead = true; }
     if (t >= 0 && t < best) { best = t; kind = 'player'; obj = p; head = isHead; }
   }
+  for (const n of G.npcs) {
+    if (!n.visible || n.state === 'down') continue;
+    const th = raySphere(o.x, o.y, o.z, d.x, d.y, d.z, n.pos.x, n.pos.y + 1.77, n.pos.z, 0.32);
+    const tb = raySphere(o.x, o.y, o.z, d.x, d.y, d.z, n.pos.x, n.pos.y + 1.0, n.pos.z, 0.55);
+    const t = th >= 0 && (tb < 0 || th < tb) ? th : tb;
+    if (t >= 0 && t < best) { best = t; kind = 'npc'; obj = n; }
+  }
   for (const v of G.vehicles.values()) {
     if (v.dead || v.id === opt.ignoreVeh) continue;
     const sp = VEH[v.type];
@@ -138,10 +146,14 @@ export function fireHitscan(o, d, range, dmg, opt = {}) {
   }
   const end = new THREE.Vector3(o.x + d.x * best, o.y + d.y * best, o.z + d.z * best);
   lastHit.kind = kind;
+  if (range > 20) alarmNpcs(o, 55);
   if (kind === 'player') {
     net.send({ t: 'hit', to: obj.id, d: Math.round(dmg * (head ? 1.8 : 1)), w: opt.weapon || 'Waffe' });
     hitmark(); sfx.hit();
     fxDust(end, 0xcc2222, 5, 2.5, 0.1);
+  } else if (kind === 'npc') {
+    hitNpc(obj); hitmark(); sfx.hit();
+    fxDust(end, 0xdddddd, 4, 2, 0.1);
   } else if (kind === 'veh') {
     net.send({ t: 'vdmg', id: obj.id, d: dmg * 0.6 });
     hitmark();
@@ -256,6 +268,8 @@ export function explode(pos, kind, ownerId, mine, projId) {
       if (d < spec.r) net.send({ t: 'sdmg', id: s.id, d: spec.dmg * 1.6 * (1 - d / spec.r) });
     }
   }
+  for (const n of G.npcs) if (n.visible && n.pos.distanceTo(pos) < spec.r) hitNpc(n);
+  alarmNpcs(pos, 90);
   // Eigener Schaden (jeder Client rechnet fuer sich, inkl. Deckung)
   const me = G.me;
   if (!me.dead && !me.vehicle) {

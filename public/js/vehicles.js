@@ -173,7 +173,11 @@ function orientGround(v, dt, snap) {
 
 function simGround(v, dt) {
   const k = G.keys, m = G.mouse, isB = v.type === 'bagger';
-  const fwdIn = (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0), turnIn = (k.KeyA ? 1 : 0) - (k.KeyD ? 1 : 0);
+  const fwdIn = (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0), rawTurn = (k.KeyA ? 1 : 0) - (k.KeyD ? 1 : 0);
+  // Alkohol: verzoegerte Lenkung + Schlangenlinien
+  const dr = Math.min(8, G.me.drunk);
+  v.steerS = (v.steerS || 0) + (rawTurn - (v.steerS || 0)) * Math.min(1, dt * (dr > 0.5 ? 9 / (1 + dr * 0.9) : 60));
+  const turnIn = v.steerS + (Math.abs(v.speed) > 1 ? Math.sin(G.time * 1.6) * 0.09 * dr + Math.sin(G.time * 0.7 + 2) * 0.05 * dr : 0);
   if (isB) {
     v.speed += clamp(fwdIn * 5.2 - v.speed, -9 * dt, 9 * dt);
     v.yaw += turnIn * 0.95 * dt;
@@ -221,7 +225,7 @@ function simGround(v, dt) {
         }
       } else doFill(tx, tz, 3.0, 0.8);
     }
-    if (Math.abs(v.speed) < 0.3 && fwdIn === 0 && turnIn === 0 && !m.l && !m.r) {
+    if (Math.abs(v.speed) < 0.3 && fwdIn === 0 && rawTurn === 0 && !m.l && !m.r) {
       v.idleT += dt;
       if (v.idleT > 12) { v.idleT = 0; awardWiba(1, 5, 'Im Bagger sitzen und nix tun'); }
     } else v.idleT = 0;
@@ -428,4 +432,11 @@ export function vehicleCamera(v, dt) {
   }
   const gh = getHeight(cam.position.x, cam.position.z) + 0.6;
   if (cam.position.y < gh) cam.position.y = gh;
+  // Schwindel beim Fahren
+  const dr = Math.min(8, G.me.drunk);
+  if (dr > 0.3) {
+    cam.rotateZ(Math.sin(G.time * 0.9) * 0.022 * dr);
+    cam.rotateX(Math.sin(G.time * 0.6 + 1) * 0.008 * dr);
+    cam.rotateY(Math.sin(G.time * 0.45) * 0.012 * dr);
+  }
 }

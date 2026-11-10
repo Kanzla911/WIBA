@@ -1,4 +1,4 @@
 node_modules/
 dist/
-world-save.json
+world-save*.json
 *.log

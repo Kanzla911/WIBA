@@ -27,16 +27,37 @@ Flieger und Kampfjets fliegen, im Wirtshaus versumpern – und nebenbei die Bana
 Die Welt (alles Gegrabene und Gebaute) wird beim Host gespeichert und bleibt erhalten.
 Geld, Inventar und WIBA-Punkte speichert jeder Spieler für sich.
 
+## Die Spielwelt
+
+Die Karte bildet die Region **Vöcklabruck – Attersee – Weißenbachtal** verkleinert nach (ca. 2 × 2 km Spielfläche,
+Norden ist oben auf der Minimap):
+
+- **Vöcklabruck** im Norden: Stadtplatz mit den beiden Stadttürmen, Hinterstadt mit Stadtpfarrkirche, Maria Schöndorf
+  auf der Anhöhe, Bahnhof, Stadtpark an der Vöckla, Tischlerei, Tankstelle – östlich davon die Baustelle mit den Baggern.
+- **Vöckla und Ager**: die Ager fließt vom Nordende des Attersees über Lenzing Richtung Vöcklabruck und nimmt dort die Vöckla auf.
+- **A1, B1, B151** und die Uferstraßen verbinden alles; dazu Timelkam, Lenzing, Gampern, St. Georgen, Vöcklamarkt.
+- **Attersee**: Seewalchen und Schörfling mit Schloss Kammer am Nordende, Attersee und Nußdorf am Westufer,
+  Weyregg, Steinbach und Weißenbach am Ostufer, Unterach im Süden – mit Stegen, Strandbädern und Segelbooten.
+- **Gahberg**: Serpentinenstraße von Weyregg hinauf, auf halber Höhe der Schneiderbauerhof, oben Kapelle und Sternwarte.
+- **Weißenbachtal** und **Höllengebirge** im Südosten: eingeschnittenes Tal mit Bach, Nixenfall und dem Betriebshof Nöhmer Stein & Beton.
+
+Gelände, Seeumriss, Straßen und Ortslagen sind aus der topografischen Karte abgeleitet. Einzelne Gebäude innerhalb der Orte
+(z. B. die Betriebe) stehen an plausiblen, aber nicht vermessenen Stellen. Der Flugplatz im Nordwesten ist erfunden – irgendwo müssen die Jets ja starten.
+
+Rund 150 **NPCs** beleben die Orte: Sie grüßen, weichen Autos aus, laufen bei Schüssen davon und kommentieren, was du so treibst.
+**Radio Salzburg** läuft im Hintergrund (offizieller ORF-Livestream, braucht Internet; `M` = an/aus, `,` `.` = Lautstärke).
+Du startest mit **15 Bier** – `B` trinkt eins, auch am Steuer: Lenkung und Sicht werden mit jedem Promille schwammiger.
+
 ## Was man tun kann
 
 | | |
 |---|---|
-| 🚜 **Baggerfahren** | Auf der Baustelle (im Osten) stehen Bagger. Graben, Erde abladen, Gruben und Rampen bauen. |
+| 🚜 **Baggerfahren** | Auf der Baustelle östlich von Vöcklabruck stehen Bagger. Graben, Erde abladen, Gruben und Rampen bauen. |
 | 🕳️ **Bunker bauen** | Grube ausheben, in der Werkstatt Betonplatten und -wände herstellen, Deckel drauf – hält Bomben ab. |
 | ⛏️ **Erz finden** | Beim Graben fallen Eisenerz, Kohle und Schwefel ab – je tiefer, desto mehr. |
 | 🔫 **Waffen schmieden** | Werkstatt im Dorf: Pistole, Schrotflinte, Sturmgewehr, Panzerfaust, Granaten, Munition. |
 | ⚔️ **PvP** | Kopfschüsse, Raketen, Überfahren, Baggerschaufel – 50 € Kopfgeld pro Abschuss. |
-| ✈️ **Fliegen** | Propellerflieger (Jauchebomben) und Kampfjets (Bord-MG, Raketen, Bomben) am Flugplatz im Norden. Schleudersitz + Fallschirm inklusive. |
+| ✈️ **Fliegen** | Propellerflieger (Jauchebomben) und Kampfjets (Bord-MG, Raketen, Bomben) am Flugplatz im Nordwesten. Schleudersitz + Fallschirm inklusive. |
 | 🍺 **Wirtshaus & Franz** | Bier, Marillenschnaps, Leberkässemmel – und beim Franz hinterm Stadl Kräuterzigaretten, Zauberschwammerl und Turbo-Pulver. Alles mit Wirkung (und Nebenwirkung). |
 | 🍌 **WIBA-Punkte** | Banane auswählen, Linksklick halten: Banane wird auf Hochglanz gewichst. Oder einfach im Bagger sitzen und nix tun. Wer am wenigsten leistet, führt die Rangliste an. |
 | 💰 **Handeln** | Erde und Erz beim Schrotthandel verkaufen, Munition und Raketen kaufen. |
@@ -55,6 +76,7 @@ Geld, Inventar und WIBA-Punkte speichert jeder Spieler für sich.
 | `R` | nachladen · Bauteil drehen |
 | `E` | einsteigen / aussteigen / Laden öffnen |
 | `I` · `Tab` · `Enter` | Inventar · Rangliste · Chat |
+| `B` · `M` | Bier trinken · Radio an/aus |
 
 | Bagger | |
 |---|---|

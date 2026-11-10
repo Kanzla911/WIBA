@@ -6,15 +6,15 @@ export const G = {
   started: false, time: 0, serverTimeOffset: 0, dayT: 0.4, daylight: 1,
   me: {
     id: 0, name: 'Hawara', color: 0xffcc00,
-    pos: new THREE.Vector3(0, 6, 28), vel: new THREE.Vector3(),
+    pos: new THREE.Vector3(410, 5, -893), vel: new THREE.Vector3(),
     yaw: Math.PI, pitch: 0, onGround: false, inWater: false,
     hp: 100, dead: false, deadT: 0, vehicle: null, chute: false, airT: 0,
-    inv: { schaufel: 1, banane: 1, bier: 2, semmel: 1 }, money: 150, wiba: 0, kills: 0, deaths: 0,
+    inv: { schaufel: 1, banane: 1, pistole: 1, muni: 60, bier: 15, semmel: 1 }, money: 150, wiba: 0, kills: 0, deaths: 0,
     held: 'schaufel', mags: {}, cooldown: 0, reloadT: 0, reloadW: null, useT: 0, recoil: 0,
     drunk: 0, fx: { gras: 0, pilze: 0, pulver: 0, crash: 0, blackout: 0 },
     wibaProg: 0, polishing: false, idleT: 0, buildRot: 0, shake: 0,
   },
-  players: new Map(), vehicles: new Map(), structs: new Map(), projectiles: [],
+  players: new Map(), npcs: [], vehicles: new Map(), structs: new Map(), projectiles: [],
   keys: {}, mouse: { dx: 0, dy: 0, l: false, r: false, lp: false, rp: false, wheel: 0 },
   pressed: {}, locked: false, menu: null, chat: false,
 };

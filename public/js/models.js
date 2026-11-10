@@ -94,7 +94,8 @@ export function makeItem(id) {
 }
 
 // ---------- Spielfigur (Bauarbeiter, schaut nach +Z, Ursprung an den Fuessen) ----------
-export function makeAvatar(color) {
+export function makeAvatar(color, look) {
+  const SH = look ? look.shirt : 0xff7a1a, PA = look ? look.pants : 0x2d3e5c;
   const group = new THREE.Group();
   const body = new THREE.Group(); group.add(body);
   const mkLimb = (x, y, len, w, c, footC) => {
@@ -104,13 +105,12 @@ export function makeAvatar(color) {
     body.add(piv);
     return piv;
   };
-  const legL = mkLimb(0.17, 0.85, 0.85, 0.26, 0x2d3e5c, 0x3a2a1e);
-  const legR = mkLimb(-0.17, 0.85, 0.85, 0.26, 0x2d3e5c, 0x3a2a1e);
-  body.add(mkBox(0.66, 0.66, 0.36, 0xff7a1a, 0, 1.18, 0));
-  body.add(mkBox(0.68, 0.07, 0.38, 0xfff27a, 0, 1.08, 0));
-  body.add(mkBox(0.68, 0.07, 0.38, 0xfff27a, 0, 1.3, 0));
-  const armL = mkLimb(0.44, 1.46, 0.68, 0.19, 0xff7a1a);
-  const armR = mkLimb(-0.44, 1.46, 0.68, 0.19, 0xff7a1a);
+  const legL = mkLimb(0.17, 0.85, 0.85, 0.26, PA, 0x3a2a1e);
+  const legR = mkLimb(-0.17, 0.85, 0.85, 0.26, PA, 0x3a2a1e);
+  body.add(mkBox(0.66, 0.66, 0.36, SH, 0, 1.18, 0));
+  if (!look) { body.add(mkBox(0.68, 0.07, 0.38, 0xfff27a, 0, 1.08, 0)); body.add(mkBox(0.68, 0.07, 0.38, 0xfff27a, 0, 1.3, 0)); }
+  const armL = mkLimb(0.44, 1.46, 0.68, 0.19, SH);
+  const armR = mkLimb(-0.44, 1.46, 0.68, 0.19, SH);
   armL.add(mkBox(0.17, 0.14, 0.17, 0xf0c39a, 0, -0.7, 0));
   armR.add(mkBox(0.17, 0.14, 0.17, 0xf0c39a, 0, -0.7, 0));
   const head = new THREE.Group(); head.position.set(0, 1.5, 0); body.add(head);
@@ -119,9 +119,9 @@ export function makeAvatar(color) {
   head.add(mkBox(0.06, 0.08, 0.04, 0x222222, 0.1, 0.31, 0.27));
   head.add(mkBox(0.06, 0.08, 0.04, 0x222222, -0.1, 0.31, 0.27));
   head.add(mkBox(0.16, 0.03, 0.04, 0x7a3b2a, 0, 0.17, 0.27));
-  const helm = new THREE.Mesh(new THREE.SphereGeometry(0.32, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), lam(color));
-  helm.position.y = 0.33; helm.castShadow = true; head.add(helm);
-  head.add(mkBox(0.5, 0.04, 0.3, color, 0, 0.35, 0.2));
+  const helm = new THREE.Mesh(new THREE.SphereGeometry(look ? 0.305 : 0.32, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), lam(look ? look.hair : color));
+  helm.position.y = look ? 0.3 : 0.33; helm.castShadow = true; head.add(helm);
+  if (!look) head.add(mkBox(0.5, 0.04, 0.3, color, 0, 0.35, 0.2));
   const hand = new THREE.Group(); hand.position.set(0, -0.72, 0.08); hand.rotation.x = -Math.PI / 2; hand.rotation.z = Math.PI;
   armR.add(hand);
   // Fallschirm

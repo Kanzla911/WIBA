@@ -1,6 +1,7 @@
 // WIBA - Gelaende: Hoehenkarte, Chunks, Graben/Auffuellen
 import * as THREE from 'three';
-import { CELL, GRID, HALF, ZONES } from './config.js';
+import { CELL, GRID, HALF } from './config.js';
+import { ZONES, HILLS, VALLEY, ROADS, RIVERS, lakeDist, samplePath, placeName } from './geo.js';
 
 const V = GRID + 1;
 const CH = 32;
@@ -34,22 +35,101 @@ function fbm(x, y) {
 }
 function sstep(a, b, x) { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
 
-function genHeight(x, z) {
-  const n = fbm(x / 170 + 31.7, z / 170 + 12.3);
-  let h = 5 + (n - 0.42) * 58;
-  h += 52 * Math.exp(-((x + 250) * (x + 250) + (z - 240) * (z - 240)) / (2 * 85 * 85));
-  h += 2.2 * (vnoise(x / 23, z / 23) - 0.5);
-  if (h < 1.4) h = 1.4 + (h - 1.4) * 0.15;
-  const dEdge = Math.max(Math.abs(x), Math.abs(z)) / HALF;
-  const fall = sstep(0.8, 1.0, dEdge);
-  h = h + (-14 - h) * fall;
+// ---------- Gelaende-Erzeugung nach Karte ----------
+export const mask = new Uint8Array(V * V); // 1 = Strasse, 2 = Fluss
+export const roadData = []; // {road, pts:[[x,z,y]]}
+export const riverData = [];
+
+function baseHeight(x, z) {
+  const px = x / 1.8 + 333, py = z / 1.8 + 540;
+  let h = 4.5 + 6 * fbm(x / 260 + 3.1, z / 260 + 7.7);
+  let acc = 0;
+  for (const g of HILLS) {
+    const dx = px - g[0], dy = py - g[1];
+    const q = (dx * dx + dy * dy) / (2 * g[3] * g[3]);
+    if (q < 8) { const v = g[2] * Math.exp(-q); acc += v * v; }
+  }
+  h += Math.sqrt(acc);
+  h += (vnoise(x / 45, z / 45) - 0.5) * (1.6 + h * 0.09);
+  const d = lakeDist(x, z);
+  if (d < 0) h = -Math.min(12, 0.8 + -d * 0.12);
+  else if (d < 95) { const s = sstep(10, 95, d); h = (0.5 + d * 0.045) * (1 - s) + h * s; }
   for (const zn of ZONES) {
     const wx = 1 - sstep(zn.rx, zn.rx + zn.blend, Math.abs(x - zn.x));
     const wz = 1 - sstep(zn.rz, zn.rz + zn.blend, Math.abs(z - zn.z));
     const w = wx * wz;
     if (w > 0) h = h + (zn.h - h) * w;
   }
+  // Huegel von Maria Schoendorf
+  const sx = x - 535, sz = z + 952;
+  h += 11 * Math.exp(-(sx * sx + sz * sz) / (2 * 20 * 20));
   return h;
+}
+
+// Stempelt Abtastpunkte [x,z,wert] ins Raster; fn(idx, gewicht, wert)
+function stamp(samples, inner, outer, wBuf, vBuf) {
+  const rr = Math.ceil(outer / CELL) + 1;
+  for (const sp of samples) {
+    const ci = Math.round(sp[0] / CELL + GRID / 2), cj = Math.round(sp[1] / CELL + GRID / 2);
+    for (let j = cj - rr; j <= cj + rr; j++) {
+      if (j < 0 || j > GRID) continue;
+      for (let i = ci - rr; i <= ci + rr; i++) {
+        if (i < 0 || i > GRID) continue;
+        const d = Math.hypot((i - GRID / 2) * CELL - sp[0], (j - GRID / 2) * CELL - sp[1]);
+        if (d > outer) continue;
+        const w = 1 - sstep(inner, outer, d);
+        const idx = i + j * V;
+        if (w > wBuf[idx]) { wBuf[idx] = w; vBuf[idx] = sp[2]; }
+      }
+    }
+  }
+}
+
+function generate() {
+  for (let j = 0; j < V; j++) for (let i = 0; i < V; i++) heights[i + j * V] = baseHeight((i - GRID / 2) * CELL, (j - GRID / 2) * CELL);
+  const wBuf = new Float32Array(V * V), vBuf = new Float32Array(V * V);
+  // Weissenbachtal einschneiden
+  const val = samplePath(VALLEY, 8);
+  val.forEach((p, k) => { p[2] = 2.5 + 30 * (k / (val.length - 1)); });
+  stamp(val, 20, 125, wBuf, vBuf);
+  for (let i = 0; i < V * V; i++) if (wBuf[i] > 0) heights[i] = Math.min(heights[i], heights[i] + (vBuf[i] - heights[i]) * wBuf[i]);
+  // Strassen: Trasse einebnen
+  wBuf.fill(0);
+  for (const r of ROADS) {
+    const pts = samplePath(r.pts, 4).filter((p) => Math.abs(p[0]) < HALF - 2 && Math.abs(p[1]) < HALF - 2);
+    const raw = pts.map((p) => getHeight(p[0], p[1]));
+    pts.forEach((p, k) => {
+      let s = 0, n = 0;
+      for (let q = Math.max(0, k - 6); q <= Math.min(pts.length - 1, k + 6); q++) { s += raw[q]; n++; }
+      p[2] = Math.max(0.9, s / n);
+    });
+    roadData.push({ road: r, pts });
+  }
+  for (const rd of roadData) stamp(rd.pts, rd.road.w / 2 + 1.5, rd.road.w / 2 + 9, wBuf, vBuf);
+  for (let i = 0; i < V * V; i++) {
+    if (wBuf[i] > 0) { heights[i] += (vBuf[i] - heights[i]) * wBuf[i]; if (wBuf[i] > 0.6) mask[i] = 1; }
+  }
+  // Fluesse einschneiden
+  wBuf.fill(0);
+  for (const r of RIVERS) {
+    const pts = samplePath(r.pts, 4).filter((p) => Math.abs(p[0]) < HALF - 2 && Math.abs(p[1]) < HALF - 2 && lakeDist(p[0], p[1]) > -6);
+    pts.forEach((p) => { p[2] = r.w; });
+    riverData.push({ river: r, pts });
+    stamp(pts, r.w / 2, r.w / 2 + 6, wBuf, vBuf);
+  }
+  for (let i = 0; i < V * V; i++) {
+    if (wBuf[i] > 0 && heights[i] > 0) {
+      heights[i] = Math.max(0.35, heights[i] - (0.9 + vBuf[i] * 0.08) * wBuf[i]);
+      if (wBuf[i] > 0.5) mask[i] = 2;
+    }
+  }
+  for (const rv of riverData) for (const p of rv.pts) p[2] = getHeight(p[0], p[1]) + 0.45;
+  baseHeights.set(heights);
+}
+export function maskAt(x, z) {
+  const i = Math.round(x / CELL + GRID / 2), j = Math.round(z / CELL + GRID / 2);
+  if (i < 0 || j < 0 || i > GRID || j > GRID) return 1;
+  return mask[i + j * V];
 }
 
 export function vertexX(i) { return ((i % V) - GRID / 2) * CELL; }
@@ -64,9 +144,14 @@ function zoneAt(x, z, pad) {
 export function zoneName(x, z) {
   const zn = zoneAt(x, z, 0);
   if (zn) return zn.name;
-  if (Math.abs(x) > HALF || Math.abs(z) > HALF) return 'Offenes Meer';
-  if ((x + 250) * (x + 250) + (z - 240) * (z - 240) < 130 * 130) return 'Faulenzer-Kogel';
-  return 'Wildnis';
+  const pl = placeName(x, z);
+  if (pl) return pl;
+  if (lakeDist(x, z) < 0) return 'Attersee';
+  const h = getHeight(x, z);
+  if (h > 70) return 'Höllengebirge';
+  if (x > -150 && z > 400 && z < 500 && h < 40) return 'Weißenbachtal';
+  if (z < -480) return 'Vöckla-Ager-Tal';
+  return 'Attergau';
 }
 export function isProtected(x, z) {
   if (Math.abs(x) > HALF - 8 || Math.abs(z) > HALF - 8) return true;
@@ -91,13 +176,19 @@ export function vertexColor(i, out) {
       slope = Math.max(Math.abs(heights[i + 1] - heights[i - 1]), Math.abs(heights[i + V] - heights[i - V])) / (2 * CELL);
     }
     const zn = zoneAt(x, z, 4);
-    if (h < 1.2) { r = 0.88; g = 0.8; b = 0.55; }
-    else if (h > 46) { r = 0.95; g = 0.96; b = 1.0; }
-    else if (h > 35 || slope > 0.95) { r = 0.52; g = 0.5; b = 0.48; }
-    else if (zn && zn.name === 'Baustelle') { r = 0.66; g = 0.54; b = 0.36; }
-    else {
+    if (mask[i] === 2) { r = 0.22; g = 0.52; b = 0.78; }
+    else if (h < 0.7) { r = 0.86; g = 0.8; b = 0.56; }
+    else if (h > 135) { r = 0.95; g = 0.96; b = 1.0; }
+    else if (h > 78 || slope > 0.95) { r = 0.56; g = 0.55; b = 0.53; }
+    else if (zn && zn.name.startsWith('Baustelle')) { r = 0.66; g = 0.54; b = 0.36; }
+    else if (h < 15 && slope < 0.12 && !zn) {
+      const f = hash2(Math.floor(x / 44) + 900, Math.floor(z / 44) + 300);
+      if (f < 0.22) { r = 0.78; g = 0.7; b = 0.34; } else if (f < 0.4) { r = 0.52; g = 0.66; b = 0.25; }
+      else if (f < 0.5) { r = 0.6; g = 0.5; b = 0.3; } else { r = 0.36; g = 0.63; b = 0.25; }
+    } else {
       const t = fbm(x / 60 + 5, z / 60 + 9);
-      r = 0.33 + 0.16 * t; g = 0.6 + 0.12 * t; b = 0.22 + 0.06 * t;
+      const k = Math.min(1, h / 60);
+      r = 0.33 + 0.14 * t - 0.08 * k; g = 0.6 + 0.1 * t - 0.12 * k; b = 0.22 + 0.06 * t;
     }
   }
   const v = 0.94 + n * 0.12;
@@ -128,12 +219,7 @@ function buildChunk(ch) {
 }
 
 export function initTerrain(scene) {
-  for (let j = 0; j < V; j++) {
-    for (let i = 0; i < V; i++) {
-      const h = genHeight((i - GRID / 2) * CELL, (j - GRID / 2) * CELL);
-      heights[i + j * V] = h; baseHeights[i + j * V] = h;
-    }
-  }
+  generate();
   const n = CH + 1;
   const index = [];
   for (let j = 0; j < CH; j++) {
@@ -162,7 +248,7 @@ export function initTerrain(scene) {
 
 export function getHeight(x, z) {
   const fx = x / CELL + GRID / 2, fz = z / CELL + GRID / 2;
-  if (fx < 0 || fz < 0 || fx >= GRID || fz >= GRID) return -14;
+  if (fx < 0 || fz < 0 || fx >= GRID || fz >= GRID) return 4;
   const ix = Math.floor(fx), iz = Math.floor(fz);
   const tx = fx - ix, tz = fz - iz;
   const i = ix + iz * V;
@@ -252,15 +338,22 @@ export function minimapImage(size) {
       const gi = Math.min(GRID, Math.floor((x / size) * GRID)), gj = Math.min(GRID, Math.floor((y / size) * GRID));
       const idx = gi + gj * V;
       const k = (x + y * size) * 4;
-      if (heights[idx] < 0) { img.data[k] = 60; img.data[k + 1] = 140; img.data[k + 2] = 200; }
+      if (heights[idx] < 0) { img.data[k] = 70; img.data[k + 1] = 170; img.data[k + 2] = 215; }
       else {
         vertexColor(idx, c);
-        const sh = 0.8 + Math.min(0.5, heights[idx] / 90);
+        const sh = 0.82 + Math.min(0.45, heights[idx] / 260) + Math.max(-0.25, Math.min(0.25, (heights[idx] - heights[Math.min(V * V - 1, idx + V + 1)]) * 0.05));
         img.data[k] = Math.min(255, c[0] * 255 * sh); img.data[k + 1] = Math.min(255, c[1] * 255 * sh); img.data[k + 2] = Math.min(255, c[2] * 255 * sh);
       }
       img.data[k + 3] = 255;
     }
   }
   ctx.putImageData(img, 0, 0);
+  const t = (v) => ((v + HALF) / (2 * HALF)) * size;
+  for (const rd of roadData) {
+    ctx.strokeStyle = rd.road.w >= 14 ? '#f39a1f' : '#fff7c8'; ctx.lineWidth = rd.road.w >= 14 ? 1.6 : 0.9;
+    ctx.beginPath();
+    rd.pts.forEach((p, k) => { if (k) ctx.lineTo(t(p[0]), t(p[1])); else ctx.moveTo(t(p[0]), t(p[1])); });
+    ctx.stroke();
+  }
   return cv;
 }

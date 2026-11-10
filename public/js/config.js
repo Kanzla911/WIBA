@@ -1,14 +1,8 @@
 // WIBA - zentrale Spielkonstanten
-export const CELL = 2.5;
-export const GRID = 384;
+export const CELL = 4;
+export const GRID = 512;
 export const HALF = (GRID * CELL) / 2; // 480 m
 export const DAY_LENGTH = 1200; // Sekunden pro Tag
-
-export const ZONES = [
-  { name: 'Dorf Faulenbach', x: 0, z: 0, rx: 100, rz: 100, h: 6, blend: 40, protect: true },
-  { name: 'Flugplatz', x: 0, z: -330, rx: 220, rz: 45, h: 8, blend: 35, protect: true },
-  { name: 'Baustelle', x: 230, z: 120, rx: 60, rz: 60, h: 7, blend: 30, protect: false },
-];
 
 export const ITEMS = {
   schaufel: { name: 'Schaufel', icon: '⛏️', hold: true },
@@ -95,5 +89,5 @@ export const VEH = {
   },
 };
 
-export const SPAWNS = [[0, 28], [8, 30], [-8, 30], [14, 22], [-14, 22], [0, 38], [20, 34], [-20, 34]];
+export const SPAWNS = [[410, -893], [418, -895], [402, -895], [425, -891], [395, -891], [410, -889], [432, -894], [388, -894]];
 export const PLAYER_COLORS = [0xffcc00, 0xff5533, 0x33aaff, 0x55dd55, 0xff66cc, 0xffffff, 0xaa66ff, 0xff9900];

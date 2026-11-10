@@ -9,6 +9,8 @@ import { initAudio, sfx, engine } from './audio.js';
 import * as UI from './ui.js';
 import * as C from './combat.js';
 import * as V from './vehicles.js';
+import { initNpcs, updateNpcs } from './npc.js';
+import { radio } from './radio.js';
 
 const $ = (id) => document.getElementById(id);
 const me = G.me;
@@ -37,6 +39,7 @@ initTerrain(scene);
 initWorld(scene, lowGfx);
 C.initCombat();
 UI.initUI();
+initNpcs();
 
 // ---------- Sichtmodell (Gegenstand in der Hand) ----------
 const vm = new THREE.Group();
@@ -68,7 +71,7 @@ for (const k of Object.keys(ghosts)) { ghosts[k].visible = false; ghosts[k].cast
 // ---------- Speicherstand ----------
 function loadSave() {
   try {
-    const s = JSON.parse(localStorage.getItem('wiba-save') || 'null');
+    const s = JSON.parse(localStorage.getItem('wiba-save-v2') || 'null');
     if (!s) return;
     if (s.name) me.name = String(s.name).slice(0, 16);
     if (typeof s.color === 'number') me.color = s.color;
@@ -86,7 +89,7 @@ function loadSave() {
 }
 function saveGame() {
   try {
-    localStorage.setItem('wiba-save', JSON.stringify({
+    localStorage.setItem('wiba-save-v2', JSON.stringify({
       name: me.name, color: me.color, inv: me.inv, money: me.money, wiba: me.wiba, mags: me.mags, ip: $('ip').value,
     }));
   } catch (e) { /* egal */ }
@@ -124,6 +127,7 @@ async function start(url) {
     connecting = false; return;
   }
   net.send({ t: 'join', name: me.name, color: me.color, wiba: me.wiba });
+  radio.start();
 }
 $('btnHost').onclick = () => start((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
 $('btnJoin').onclick = () => {
@@ -225,8 +229,8 @@ net.on('welcome', (m) => {
   $('clickhint').classList.remove('hidden');
   G.started = true;
   saveGame();
-  UI.toast('Servus in Faulenbach! F1 zeigt die Steuerung.', 'good');
-  UI.addChat('', 'Tipp: Banane auswählen und Linksklick halten = WIBA-Punkte. Zum Graben: Bagger auf der Baustelle (Osten).');
+  UI.toast('Servus in Vöcklabruck! F1 zeigt die Steuerung.', 'good');
+  UI.addChat('', 'Tipp: [B] Bier trinken · [M] Radio · Bagger: Baustelle östlich von Vöcklabruck · Zum Attersee: Straße nach Süden.');
 });
 net.on('join', (m) => { addPlayer(m.p); UI.addFeed(`➕ ${m.p.name} ist jetzt dabei`); });
 net.on('leave', (m) => { UI.addFeed(`➖ ${nameOf(m.id)} ist weg`); removePlayer(m.id); });
@@ -436,14 +440,14 @@ function updatePlayer(dt, ctl) {
   let nx = x + me.vel.x * dt;
   if (nx !== x) {
     const h1 = getHeight(nx, z);
-    if ((!stuck && blockedAt(nx, z, y)) || (h1 > y + 0.04 && (h1 - h0) > Math.abs(nx - x) * 1.6) || Math.abs(nx) > HALF + 150) { me.vel.x = 0; nx = x; }
+    if ((!stuck && blockedAt(nx, z, y)) || (h1 > y + 0.04 && (h1 - h0) > Math.abs(nx - x) * 1.6) || Math.abs(nx) > HALF - 6) { me.vel.x = 0; nx = x; }
   }
   x = nx;
   const h0b = getHeight(x, z);
   let nz = z + me.vel.z * dt;
   if (nz !== z) {
     const h1 = getHeight(x, nz);
-    if ((!stuck && blockedAt(x, nz, y)) || (h1 > y + 0.04 && (h1 - h0b) > Math.abs(nz - z) * 1.6) || Math.abs(nz) > HALF + 150) { me.vel.z = 0; nz = z; }
+    if ((!stuck && blockedAt(x, nz, y)) || (h1 > y + 0.04 && (h1 - h0b) > Math.abs(nz - z) * 1.6) || Math.abs(nz) > HALF - 6) { me.vel.z = 0; nz = z; }
   }
   z = nz;
   // Vertikal
@@ -655,7 +659,7 @@ function updateEffects(dt) {
   if (filterT <= 0) {
     filterT = 0.05;
     const f = [];
-    if (me.drunk > 3) f.push(`blur(${((me.drunk - 3) * 0.55).toFixed(1)}px)`);
+    if (me.drunk > 1.5) f.push(`blur(${Math.min(4.5, (me.drunk - 1.5) * (me.vehicle ? 0.6 : 0.45)).toFixed(1)}px)`);
     if (fx.pilze > 0) { f.push(`hue-rotate(${Math.round((G.time * 70) % 360)}deg)`); f.push('saturate(2.3)'); }
     else if (fx.gras > 0) { f.push('saturate(1.45)'); f.push('sepia(0.25)'); }
     if (fx.pulver > 0) f.push('contrast(1.3)');
@@ -718,6 +722,10 @@ function frame(now) {
     if (me.deadT <= 0 && me.deadT > -100) { me.deadT = -1000; net.send({ t: 'respawn' }); }
   }
   updateInteraction(dt, ctl);
+  if (ctl && G.pressed.KeyB) { if (invCount('bier') > 0) consume('bier'); else UI.toastOnce('nobier', 'Kein Bier mehr! Ab ins Wirtshaus.', 'bad'); }
+  if (G.pressed.KeyM && !G.chat) radio.toggle();
+  if (G.pressed.Comma) radio.setVol(radio.vol - 0.1);
+  if (G.pressed.Period) radio.setVol(radio.vol + 0.1);
   if (me.vehicle) {
     if (!ctl) { G.mouse.dx = G.mouse.dy = 0; }
     vm.visible = false; UI.setWibaBar(0);
@@ -728,6 +736,7 @@ function frame(now) {
   }
   V.updateVehicles(dt);
   updatePlayers(dt);
+  updateNpcs(dt);
 
   // Kamera
   if (me.vehicle) {
@@ -779,3 +788,10 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 window.WIBA = { G, net, C, V, UI, getHeight };
+
+radio.onChange = () => {
+  const el = $('radio');
+  const st = radio.status;
+  el.textContent = `📻 Radio Salzburg – ${st}${st === 'Verbindung fehlgeschlagen' ? ' · [M] neu verbinden' : (st === 'spielt' || st === 'lädt' ? ' · [M] Pause' : ' · [M] Start')} · [,][.] Lautstärke ${Math.round(radio.vol * 100)}%`;
+};
+radio.onChange();

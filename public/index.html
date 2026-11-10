@@ -62,7 +62,8 @@
   #prompt { position: absolute; left: 50%; top: 60%; transform: translateX(-50%); background: var(--p); padding: 7px 14px; border-radius: 9px; font-size: 15px; border: 1px solid var(--y); white-space: nowrap; }
   #wibabar { position: absolute; left: 50%; top: 68%; transform: translateX(-50%); width: 260px; text-align: center; font-size: 13px; text-shadow: 0 1px 2px #000; }
   #wibabar .bar > div { background: linear-gradient(#ffe45a, #f2b90f); transition: none; }
-  #feed { position: absolute; right: 14px; top: 14px; text-align: right; font-size: 14px; }
+  #radio { position: absolute; right: 14px; top: 14px; background: var(--p); padding: 5px 11px; border-radius: 8px; font-size: 12px; }
+  #feed { position: absolute; right: 14px; top: 48px; text-align: right; font-size: 14px; }
   #feed div { background: var(--p); padding: 4px 10px; border-radius: 7px; margin-bottom: 4px; display: inline-block; clear: both; float: right; }
   #chatlog { position: absolute; left: 14px; top: 250px; width: 360px; font-size: 14px; text-shadow: 0 1px 2px #000; }
   #chatlog div { margin-bottom: 2px; background: rgba(0,0,0,.28); padding: 2px 7px; border-radius: 5px; display: inline-block; clear: both; float: left; max-width: 100%; word-wrap: break-word; }
@@ -120,6 +121,7 @@
   <div id="minimapWrap"><canvas id="minimap" width="190" height="190"></canvas><br><div id="loc"></div></div>
   <div id="chatlog"></div>
   <input id="chatinput" class="hidden" type="text" maxlength="160" placeholder="Nachricht… (Enter = senden)">
+  <div id="radio"></div>
   <div id="feed"></div>
   <div id="toasts"></div>
   <div id="crosshair"></div>
@@ -155,7 +157,8 @@
       <kbd>Rechtsklick</kbd> zielen · Schaufel: auffüllen<br>
       <kbd>R</kbd> nachladen · Bauteil drehen<br>
       <kbd>E</kbd> einsteigen / Laden öffnen<br>
-      <kbd>I</kbd> Inventar · <kbd>Tab</kbd> Rangliste · <kbd>Enter</kbd> Chat
+      <kbd>I</kbd> Inventar · <kbd>Tab</kbd> Rangliste · <kbd>Enter</kbd> Chat<br>
+      <kbd>B</kbd> Bier trinken (auch am Steuer…) · <kbd>M</kbd> Radio an/aus · <kbd>,</kbd><kbd>.</kbd> Radio-Lautstärke
       <h4>Bagger</h4>
       <kbd>W</kbd><kbd>S</kbd> fahren · <kbd>A</kbd><kbd>D</kbd> lenken<br>
       Maus: Oberwagen drehen / Arm aus- und einfahren<br>
@@ -172,7 +175,7 @@
       <kbd>E</kbd> aussteigen – in der Luft = Schleudersitz!
       <h4>Ziel des Spiels</h4>
       Möglichst wenig tun. WIBA-Punkte gibt’s fürs Banane-Wichsen (auf Hochglanz polieren, eh klar) und fürs Im-Bagger-Sitzen.
-      Nebenbei: Erz graben, Waffen schmieden, Bunker bauen, andere ärgern.
+      Nebenbei: von Vöcklabruck an den Attersee fahren, auf den Gahberg, ins Weißenbachtal – Erz graben, Waffen schmieden, Bunker bauen, andere ärgern.
       <h4>Sonstiges</h4>
       <kbd>F1</kbd> Hilfe · <kbd>F11</kbd> Vollbild · <kbd>ESC</kbd> Maus freigeben
     </div>
@@ -201,6 +204,7 @@
   </div>
 </div>
 
+<script src="./vendor/hls.min.js"></script>
 <script type="module" src="./js/game.js"></script>
 </body>
 </html>

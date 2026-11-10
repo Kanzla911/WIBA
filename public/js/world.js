@@ -1,10 +1,12 @@
 // WIBA - Welt: Himmel, Licht, Wasser, Dorf, Flugplatz, Baustelle, Baeume, Kollisionsboxen
 import * as THREE from 'three';
-import { HALF, GRID, CELL, ZONES } from './config.js';
-import { getHeight, heights, editListeners } from './terrain.js';
+import { HALF, GRID, CELL } from './config.js';
+import { getHeight, heights, editListeners, mask, maskAt, roadData, riverData } from './terrain.js';
+import { ZONES, TOWN, PLACES, KAMMER, GAHBERG, SCHNEIDERBAUER, NOEHMER, NIXENFALL, lakeDist } from './geo.js';
 
 export const boxes = []; // {x0,y0,z0,x1,y1,z1, sid?}
 export const pois = []; // {x,y,z,kind,label}
+export const npcSpots = []; // {x,z,r,n,kind}
 export let sun = null, hemi = null, water = null;
 const clouds = [];
 let cloudMat = null;
@@ -110,18 +112,17 @@ function mulberry(seed) {
   };
 }
 
-function house(x, z, w, d, h, color, roofColor, ry = 0) {
+function house(x, z, w, d, h, color, roofColor, ry = 0, Yin) {
   const g = new THREE.Group();
-  const Y = 6;
+  const Y = Yin === undefined ? getHeight(x, z) : Yin;
   g.add(mkBox(w, h, d, color, 0, h / 2, 0));
-  // Satteldach
+  g.add(mkBox(w, 4, d, 0x8d8a84, 0, -2, 0));
   const roof = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 1, 1, 4, 1), lam(roofColor));
-  roof.scale.set(w * 0.78, h * 0.55, d * 0.78);
+  roof.scale.set(w * 0.78, h * 0.5, d * 0.78);
   roof.rotation.y = Math.PI / 4;
-  roof.position.y = h + h * 0.275;
+  roof.position.y = h + h * 0.25;
   roof.castShadow = true;
   g.add(roof);
-  // Tuer + Fenster
   g.add(mkBox(1.3, 2.2, 0.15, 0x5a3a22, 0, 1.1, d / 2 + 0.03));
   const nWin = Math.max(1, Math.floor(w / 4));
   for (let i = 0; i < nWin; i++) {
@@ -133,8 +134,8 @@ function house(x, z, w, d, h, color, roofColor, ry = 0) {
   g.position.set(x, Y, z);
   g.rotation.y = ry;
   sceneRef.add(g);
-  const sw = ry ? d : w, sd = ry ? w : d;
-  solid(x, Y, z, sw, h + 1.5, sd);
+  const sw = Math.abs(Math.sin(ry)) > 0.5 ? d : w, sd = Math.abs(Math.sin(ry)) > 0.5 ? w : d;
+  solid(x, Y - 3, z, sw, h + 4.5, sd);
   return g;
 }
 
@@ -146,153 +147,332 @@ function addPoi(x, z, kind, label, emoji) {
   sceneRef.add(sp);
   const ring = new THREE.Mesh(new THREE.RingGeometry(1.2, 1.5, 20), new THREE.MeshBasicMaterial({ color: 0xffe14a, transparent: true, opacity: 0.8, side: THREE.DoubleSide }));
   ring.rotation.x = -Math.PI / 2;
-  ring.position.set(x, y + 0.08, z);
+  ring.position.set(x, y + 0.3, z);
   sceneRef.add(ring);
 }
-
-function buildTown() {
-  const Y = 6;
-  // Strassen
-  const road = lam(0x55555c);
-  const mkRoad = (x, z, w, d) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), road);
-    m.rotation.x = -Math.PI / 2; m.position.set(x, Y + 0.04, z); m.receiveShadow = true;
-    sceneRef.add(m);
-  };
-  mkRoad(0, 0, 190, 9); mkRoad(0, 22.5, 9, 145);
-  // Dorfplatz
-  const plaza = new THREE.Mesh(new THREE.CircleGeometry(17, 20), lam(0xcdbf9f));
-  plaza.rotation.x = -Math.PI / 2; plaza.position.set(0, Y + 0.06, 0); plaza.receiveShadow = true;
-  sceneRef.add(plaza);
-  // Maibaum
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 22, 6), lam(0xf2f2f2));
-  pole.position.set(0, Y + 11, 0); pole.castShadow = true; sceneRef.add(pole);
-  for (let i = 0; i < 6; i++) {
-    const st = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, 1.2, 6), lam(0x2f6fd0));
-    st.position.set(0, Y + 2 + i * 3.4, 0); sceneRef.add(st);
+function label(text, x, z, up = 9, size = 2.2) {
+  const sp = textSprite(text, size);
+  sp.position.set(x, getHeight(x, z) + up, z);
+  sceneRef.add(sp);
+}
+function church(x, z, s = 1, onion = true, Yin) {
+  const Y = Yin === undefined ? getHeight(x, z) : Yin;
+  house(x, z, 9 * s, 16 * s, 8 * s, 0xfafafa, 0x7a2f2f, 0, Y);
+  const tz = z + 10.5 * s;
+  sceneRef.add(mkBox(5 * s, 18 * s, 5 * s, 0xfafafa, x, Y + 9 * s - 2, tz));
+  solid(x, Y - 3, tz, 5 * s, 20 * s, 5 * s);
+  if (onion) {
+    const o = new THREE.Mesh(new THREE.SphereGeometry(3 * s, 8, 6), lam(0x2f6f5a));
+    o.scale.y = 1.25; o.position.set(x, Y + 19 * s, tz); o.castShadow = true; sceneRef.add(o);
   }
-  const wreath = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.28, 5, 10), lam(0x2e8b3a));
-  wreath.rotation.x = Math.PI / 2; wreath.position.set(0, Y + 18, 0); sceneRef.add(wreath);
-  const top = new THREE.Mesh(new THREE.ConeGeometry(1.3, 3, 6), lam(0x2e8b3a));
-  top.position.set(0, Y + 23, 0); sceneRef.add(top);
-  solid(0, Y, 0, 0.8, 22, 0.8);
-  sign('WIBA', 1.6, 0, Y + 4.2, 0.4, 0, { bg: '#ffd21f', color: '#222' });
-  sign('WIBA', 1.6, 0, Y + 4.2, -0.4, Math.PI, { bg: '#ffd21f', color: '#222' });
-
-  // Wirtshaus
-  house(-34, -30, 20, 13, 7, 0xf3e3b5, 0x8a3b2a);
-  sign('Wirtshaus „Zum Faulen Bagger“', 1.1, -34, Y + 5.2, -23.3, 0);
-  addPoi(-34, -20.5, 'wirt', 'Wirtshaus', '🍺');
-  // Biertische
-  for (let i = 0; i < 3; i++) {
-    const tx = -44 + i * 5, tz = -17;
-    sceneRef.add(mkBox(2.6, 0.12, 0.9, 0xb98a4f, tx, Y + 0.85, tz));
-    sceneRef.add(mkBox(2.6, 0.1, 0.4, 0xb98a4f, tx, Y + 0.5, tz - 0.9));
-    sceneRef.add(mkBox(2.6, 0.1, 0.4, 0xb98a4f, tx, Y + 0.5, tz + 0.9));
-    sceneRef.add(mkBox(0.12, 0.85, 0.7, 0x6b4a2a, tx - 1.1, Y + 0.42, tz));
-    sceneRef.add(mkBox(0.12, 0.85, 0.7, 0x6b4a2a, tx + 1.1, Y + 0.42, tz));
+  const sp = new THREE.Mesh(new THREE.ConeGeometry((onion ? 0.8 : 2.8) * s, (onion ? 5 : 9) * s, 6), lam(onion ? 0x2f6f5a : 0x7a2f2f));
+  sp.position.set(x, Y + (onion ? 24.5 : 21) * s, tz); sp.castShadow = true; sceneRef.add(sp);
+}
+function tree(x, z, s = 1) {
+  const y = getHeight(x, z);
+  const t = new THREE.Mesh(new THREE.CylinderGeometry(0.22 * s, 0.34 * s, 2.4 * s, 5), lam(0x6b4a2a));
+  t.position.set(x, y + 1.2 * s, z); sceneRef.add(t);
+  const b = new THREE.Mesh(new THREE.IcosahedronGeometry(2.0 * s, 0), lam(0x4f9a3c));
+  b.position.set(x, y + 3.6 * s, z); b.castShadow = true; sceneRef.add(b);
+}
+function bench(x, z, ry = 0) {
+  const y = getHeight(x, z);
+  const g = new THREE.Group();
+  g.add(mkBox(1.8, 0.1, 0.5, 0x8a5a2f, 0, 0.5, 0)); g.add(mkBox(1.8, 0.5, 0.08, 0x8a5a2f, 0, 0.85, -0.22));
+  g.add(mkBox(0.1, 0.5, 0.45, 0x333333, -0.8, 0.25, 0)); g.add(mkBox(0.1, 0.5, 0.45, 0x333333, 0.8, 0.25, 0));
+  g.position.set(x, y, z); g.rotation.y = ry; sceneRef.add(g);
+}
+function ribbon(pts, w, color, lift) {
+  const pos = [], idx = [];
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+    let dx = b[0] - a[0], dz = b[1] - a[1];
+    const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+    const p = pts[i];
+    pos.push(p[0] - dz * w / 2, p[2] + lift, p[1] + dx * w / 2, p[0] + dz * w / 2, p[2] + lift, p[1] - dx * w / 2);
+    if (i < pts.length - 1) { const k = i * 2; idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3); }
   }
-  // Werkstatt
-  house(36, -30, 18, 14, 6, 0x9fb3c8, 0x4a5560);
-  sign('WERKSTATT', 1.2, 36, Y + 4.6, -22.8, 0, { bg: '#2b3440', color: '#ffd21f' });
-  addPoi(36, -20, 'werk', 'Werkbank', '🔧');
-  sceneRef.add(mkBox(3, 1, 1.2, 0x6b5a48, 36, Y + 0.5, -21.6));
-  // Schrotthandel
-  house(38, 32, 20, 14, 6, 0xc98f5a, 0x5c4033);
-  sign('Schrotthandel Hintermoser', 1.1, 38, Y + 4.6, 24.8, Math.PI);
-  addPoi(38, 22, 'handel', 'Schrotthandel', '💰');
-  for (let i = 0; i < 5; i++) sceneRef.add(mkBox(1.4, 1.2 + (i % 3) * 0.5, 1.4, [0x8a5a3a, 0x777f88, 0x996633][i % 3], 26 + i * 1.7, Y + 0.6 + (i % 3) * 0.25, 23));
-  // Dealer-Stadl
-  house(-62, 44, 12, 10, 5, 0x7a5a3a, 0x3d2b1f, Math.PI / 2);
-  addPoi(-52.5, 44, 'dealer', 'Der Franz', '🌿');
-  // Kirche mit Zwiebelturm
-  house(0, -72, 14, 24, 10, 0xfafafa, 0x7a2f2f);
-  sceneRef.add(mkBox(6, 22, 6, 0xfafafa, 0, Y + 11, -56));
-  solid(0, Y, -56, 6, 24, 6);
-  const onion = new THREE.Mesh(new THREE.SphereGeometry(3.6, 8, 6), lam(0x2f6f5a));
-  onion.scale.y = 1.25; onion.position.set(0, Y + 25.5, -56); onion.castShadow = true; sceneRef.add(onion);
-  const spire = new THREE.Mesh(new THREE.ConeGeometry(0.9, 6, 6), lam(0x2f6f5a));
-  spire.position.set(0, Y + 32, -56); sceneRef.add(spire);
-  sceneRef.add(mkBox(0.25, 2.4, 0.25, 0xe8c040, 0, Y + 36, -56));
-  sceneRef.add(mkBox(1.4, 0.25, 0.25, 0xe8c040, 0, Y + 36.3, -56));
-  // Wohnhaeuser
-  const cols = [0xf7d9c4, 0xd9ead3, 0xfff2cc, 0xd0e0f0, 0xf4cccc, 0xe6d5f5];
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setIndex(idx); geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+  m.receiveShadow = true;
+  sceneRef.add(m);
+}
+function buildRoadsRivers() {
+  for (const rd of roadData) {
+    if (rd.pts.length < 2) continue;
+    ribbon(rd.pts, rd.road.w, rd.road.col || 0x55555c, 0.22);
+    if (rd.road.w >= 8) ribbon(rd.pts, 0.35, 0xe8e8e8, 0.27);
+  }
+  for (const rv of riverData) if (rv.pts.length > 1) ribbon(rv.pts, rv.river.w + 3, 0x3a9ad8, 0);
+}
+
+// Naechster Uferpunkt (achsparallel Richtung See)
+function shore(x, z) {
+  let best = null, bd = 1e9;
+  for (const d of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    for (let t = 0; t < 140; t += 2) {
+      if (lakeDist(x + d[0] * t, z + d[1] * t) < -1) { if (t < bd) { bd = t; best = { x: x + d[0] * t, z: z + d[1] * t, dx: d[0], dz: d[1] }; } break; }
+    }
+  }
+  return best;
+}
+function steg(sh, len = 18) {
+  const cx = sh.x + sh.dx * (len / 2 - 3), cz = sh.z + sh.dz * (len / 2 - 3);
+  const w = sh.dx ? len : 2.4, d = sh.dx ? 2.4 : len;
+  sceneRef.add(mkBox(w, 0.25, d, 0xa87c4f, cx, 0.55, cz));
+  solid(cx, -2, cz, w, 2.7, d);
+}
+function sailboat(x, z, ry) {
+  const g = new THREE.Group();
+  g.add(mkBox(1.8, 0.8, 5.5, 0xf4f4f4, 0, 0.3, 0));
+  g.add(mkBox(0.12, 7, 0.12, 0xcccccc, 0, 3.8, 0.4));
+  const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.9, 0.3), new THREE.Vector3(0, 7.2, 0.3), new THREE.Vector3(0, 0.9, -2.6)]);
+  geo.computeVertexNormals();
+  g.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide })));
+  g.position.set(x, 0, z); g.rotation.y = ry; sceneRef.add(g);
+}
+function scatterHouses(rnd, cx, cz, n, r, pal) {
+  const cols = pal || [0xf7d9c4, 0xd9ead3, 0xfff2cc, 0xd0e0f0, 0xf4cccc, 0xe6d5f5, 0xfafafa];
   const roofs = [0x8a3b2a, 0x6b4a3a, 0x7a2f2f, 0x55606b];
-  const spots = [
-    [-70, -34, 12, 10, 0], [-72, -60, 11, 11, 0], [-40, -64, 12, 10, 0], [70, -34, 12, 11, 0], [72, -62, 11, 10, 0],
-    [42, -66, 12, 10, 0], [-34, 34, 13, 10, 0], [-36, 66, 12, 11, 0], [-70, 74, 11, 10, 0], [72, 34, 11, 12, 0],
-    [70, 66, 12, 10, 0], [40, 68, 13, 11, 0], [-84, 10, 10, 12, 1], [84, 12, 10, 12, 1], [-84, -12, 10, 11, 1],
-  ];
-  spots.forEach((s, i) => house(s[0], s[1], s[2], s[3], 5 + (i % 3), cols[i % cols.length], roofs[i % roofs.length], s[4] ? Math.PI / 2 : 0));
-  // Brunnen
-  const well = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.4, 1, 10), lam(0x9a9a9a));
-  well.position.set(10, Y + 0.5, 10); well.castShadow = true; sceneRef.add(well);
-  const ww = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.9, 0.1, 10), lam(0x4aa3df));
-  ww.position.set(10, Y + 0.95, 10); sceneRef.add(ww);
-  solid(10, Y, 10, 4, 1, 4);
-  sign('Ortsgebiet FAULENBACH – Hier wird nix g’arbeitet', 1.0, 0, Y + 3, 96, Math.PI);
+  let made = 0;
+  for (let t = 0; t < n * 14 && made < n; t++) {
+    const a = rnd() * 6.283, d = Math.sqrt(rnd()) * r;
+    const x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d;
+    const w = 9 + rnd() * 4, dd = 8 + rnd() * 3;
+    const h0 = getHeight(x, z);
+    if (h0 < 1.3) continue;
+    let ok = true;
+    for (const o of [[0, 0], [w / 2 + 3, dd / 2 + 3], [-w / 2 - 3, dd / 2 + 3], [w / 2 + 3, -dd / 2 - 3], [-w / 2 - 3, -dd / 2 - 3]]) {
+      if (maskAt(x + o[0], z + o[1]) || Math.abs(getHeight(x + o[0], z + o[1]) - h0) > 2.6 || pointInBoxes(x + o[0], h0 + 1, z + o[1], 3)) { ok = false; break; }
+    }
+    if (!ok) continue;
+    house(x, z, w, dd, 4.5 + rnd() * 2.5, cols[Math.floor(rnd() * cols.length)], roofs[Math.floor(rnd() * roofs.length)], rnd() < 0.5 ? 0 : Math.PI / 2);
+    made++;
+  }
+}
+
+function buildVoecklabruck(rnd) {
+  const Y = 5, T = TOWN;
+  const pav = new THREE.Mesh(new THREE.PlaneGeometry(126, 34), lam(0xcdbf9f));
+  pav.rotation.x = -Math.PI / 2; pav.position.set(T.x, Y + 0.1, -905); pav.receiveShadow = true; sceneRef.add(pav);
+  // Wappentuerme an beiden Enden des Stadtplatzes (Tor ueber der Strasse)
+  for (const [tx, col, nm] of [[T.x - 62, 0xf2e2b0, 'Oberer Stadtturm'], [T.x + 62, 0xe8d9c0, 'Unterer Stadtturm']]) {
+    for (const s of [-1, 1]) { sceneRef.add(mkBox(8, 7, 2.6, col, tx, Y + 3.5, -905 + s * 6.6)); solid(tx, Y, -905 + s * 6.6, 8, 24, 2.6); }
+    sceneRef.add(mkBox(8, 16, 15.8, col, tx, Y + 15, -905));
+    const rf = new THREE.Mesh(new THREE.ConeGeometry(8.6, 9, 4), lam(0x7a2f2f)); rf.rotation.y = Math.PI / 4; rf.position.set(tx, Y + 27.5, -905); rf.castShadow = true; sceneRef.add(rf);
+    for (let i = 0; i < 5; i++) for (const s of [-1, 1]) sceneRef.add(mkBox(0.1, 1.6, 1.3, [0xc0392b, 0x2f6fd0, 0xe8c040, 0x2e8b3a, 0xffffff][i], tx + s * 4.06, Y + 13 + (i % 2) * 2.2, -910 + i * 2.5));
+    sign(nm, 0.9, tx, Y + 9.2, -905 + 8.0, 0);
+  }
+  // Haeuserzeilen am Stadtplatz
+  const pal = [0xf7d9c4, 0xfff2cc, 0xd9ead3, 0xf4cccc, 0xd0e0f0, 0xf2e2b0, 0xe6d5f5];
+  let k = 0;
+  for (let x = T.x - 52; x <= T.x + 52; x += 10.4) {
+    if (Math.abs(x - T.x) < 9) continue;
+    house(x, -927, 10, 10, 8 + (k % 3) * 1.5, pal[k % 7], 0x7a3b2a, 0, Y);
+    house(x, -883, 10, 10, 8 + ((k + 1) % 3) * 1.5, pal[(k + 3) % 7], 0x6b4a3a, Math.PI, Y); k++;
+  }
+  sign('Gasthaus „Zum Faulen Bagger“', 1.0, T.x - 31, Y + 4.6, -921.8, 0);
+  addPoi(T.x - 31, -917.5, 'wirt', 'Wirtshaus', '🍺');
+  sign('WAFFENSCHMIEDE', 1.0, T.x + 31, Y + 4.6, -921.8, 0, { bg: '#2b3440', color: '#ffd21f' });
+  addPoi(T.x + 31, -917.5, 'werk', 'Werkbank', '🔧');
+  sign('Schrotthandel Hintermoser', 1.0, T.x + 31, Y + 4.6, -888.2, Math.PI);
+  addPoi(T.x + 31, -892.5, 'handel', 'Schrotthandel', '💰');
+  sign('Café am Stadtplatz', 0.9, T.x - 31, Y + 4.6, -888.2, Math.PI);
+  for (let i = 0; i < 4; i++) { bench(T.x - 44 + i * 8, -896, Math.PI); sceneRef.add(mkBox(1, 0.8, 1, 0xb98a4f, T.x - 40 + i * 8, Y + 0.5, -893)); }
+  const well = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.4, 1, 10), lam(0x9a9a9a)); well.position.set(T.x + 50, Y + 0.5, -916); sceneRef.add(well); solid(T.x + 50, Y, -916, 4, 1, 4);
+  label('Stadtplatz Vöcklabruck', T.x, -905, 34, 2.6);
+  // Hinterstadt: Stadtpfarrkirche St. Ulrich, Heimathaus, Franz
+  church(T.x + 40, -956, 1.0, false, Y); label('Stadtpfarrkirche St. Ulrich', T.x + 40, -950, 30, 1.6);
+  house(T.x + 16, -952, 10, 9, 6, 0xf2e2b0, 0x6b4a3a, 0, Y); sign('Heimathaus · Stadtmuseum', 0.8, T.x + 16, Y + 3.6, -947.3, 0);
+  house(T.x - 34, -954, 10, 8, 5, 0x7a5a3a, 0x3d2b1f, 0, Y); addPoi(T.x - 34, -946, 'dealer', 'Der Franz', '🌿');
+  sign('Hinterstadt', 0.8, T.x - 12, Y + 2.2, -941, 0);
+  // Bahnhof + Westbahn
+  house(T.x - 70, -968, 28, 8, 6, 0xe8d9c0, 0x55606b, 0, Y); sign('Bahnhof Vöcklabruck', 1.0, T.x - 70, Y + 4.6, -963.8, 0);
+  for (const dz of [-979.5, -981]) sceneRef.add(mkBox(296, 0.18, 0.2, 0x3a3a3a, T.x, Y + 0.12, dz));
+  sceneRef.add(mkBox(296, 0.06, 3.2, 0x7a7468, T.x, Y + 0.04, -980.2));
+  // Maria Schoendorf auf der Anhoehe
+  church(535, -952, 1.1, false); label('Maria Schöndorf', 535, -948, 38, 1.8);
+  // Stadtpark an der Voeckla
+  for (let i = 0; i < 14; i++) tree(T.x - 130 + i * 20 + (i % 3) * 4, -858 - (i % 2) * 8, 1 + (i % 3) * 0.2);
+  for (let i = 0; i < 5; i++) bench(T.x - 100 + i * 45, -849, 0);
+  sign('Stadtpark · Vöckla-Ufer', 0.8, T.x - 14, Y + 2.2, -872, Math.PI);
+  // Gewerbe suedlich der Voeckla
+  const dx = T.x - 80, dzz = -806;
+  house(dx, dzz, 24, 13, 6.5, 0xd8c9a8, 0x5c4033, 0, Y); sign('Tischlerei Dorfner', 1.2, dx, Y + 4.8, dzz + 6.7, 0, { bg: '#5c4033', color: '#fff' });
+  for (let i = 0; i < 6; i++) sceneRef.add(mkBox(4, 0.5 + (i % 3) * 0.5, 1.2, 0xc9a56b, dx - 8 + (i % 3) * 5, Y + 0.3 + (i % 3) * 0.25, dzz + 10 + Math.floor(i / 3) * 2));
+  solid(dx, Y, dzz + 11, 16, 1.2, 4);
+  // Tankstelle
+  const gx = T.x + 40, gz = -812;
+  sceneRef.add(mkBox(16, 0.5, 9, 0xd0322a, gx, Y + 5, gz));
+  for (const s of [-1, 1]) { sceneRef.add(mkBox(0.5, 5, 0.5, 0xdddddd, gx + s * 6.5, Y + 2.5, gz)); solid(gx + s * 6.5, Y, gz, 0.6, 5, 0.6); sceneRef.add(mkBox(0.8, 1.6, 0.6, 0xf2b90f, gx + s * 2.5, Y + 0.8, gz)); }
+  house(gx, gz + 11, 12, 6, 4, 0xf4f4f4, 0x55606b, Math.PI, Y); sign('Tankstelle', 0.9, gx, Y + 5.9, gz - 4.6, Math.PI, { bg: '#d0322a', color: '#fff' });
+  house(T.x + 95, -808, 26, 14, 6, 0xe6e6e6, 0x55606b, Math.PI, Y); sign('Nah & Frisch Markt', 1.1, T.x + 95, Y + 4.8, -815.2, Math.PI, { bg: '#2e8b3a', color: '#fff' });
+  scatterHouses(rnd, T.x, T.z, 34, 150);
+  sign('Vöcklabruck', 1.3, 266, Y + 3, -899, -Math.PI / 2, { bg: '#fff', color: '#111' });
+  npcSpots.push({ x: T.x, z: -905, r: 55, n: 16, kind: 'stadt' }, { x: T.x, z: -945, r: 30, n: 5, kind: 'stadt' }, { x: T.x - 40, z: -855, r: 60, n: 6, kind: 'park' },
+    { x: dx, z: dzz + 12, r: 10, n: 3, kind: 'arbeit' }, { x: gx, z: gz + 2, r: 12, n: 2, kind: 'stadt' }, { x: T.x - 70, z: -962, r: 14, n: 4, kind: 'stadt' }, { x: T.x + 95, z: -820, r: 14, n: 4, kind: 'stadt' });
+}
+
+function buildVillages(rnd) {
+  for (const p of PLACES) {
+    scatterHouses(rnd, p.x, p.z, p.n, p.r);
+    if (p.church) {
+      for (let t = 0; t < 30; t++) {
+        const x = p.x + (rnd() - 0.5) * 50, z = p.z + (rnd() - 0.5) * 50;
+        if (getHeight(x, z) > 1.5 && !maskAt(x, z) && !maskAt(x, z + 11) && !pointInBoxes(x, getHeight(x, z) + 1, z, 9) && !pointInBoxes(x, getHeight(x, z) + 1, z + 10, 6)) { church(x, z, 0.8, true); break; }
+      }
+    }
+    label(p.name, p.x, p.z, 22, 2.4);
+    npcSpots.push({ x: p.x, z: p.z, r: p.r * 0.8, n: 5, kind: 'dorf' });
+    if (p.lake) {
+      const sh = shore(p.x, p.z);
+      if (sh) {
+        steg(sh, 20);
+        sailboat(sh.x + sh.dx * 26 + sh.dz * 8, sh.z + sh.dz * 26 + sh.dx * 8, rnd() * 6);
+        sailboat(sh.x + sh.dx * 40 - sh.dz * 12, sh.z + sh.dz * 40 - sh.dx * 12, rnd() * 6);
+        const bx = sh.x - sh.dx * 9, bz = sh.z - sh.dz * 9;
+        for (let i = 0; i < 3; i++) {
+          const ux = bx + sh.dz * (i - 1) * 5, uz = bz + sh.dx * (i - 1) * 5, uy = getHeight(ux, uz);
+          sceneRef.add(mkBox(0.1, 2.2, 0.1, 0xffffff, ux, uy + 1.1, uz));
+          const c = new THREE.Mesh(new THREE.ConeGeometry(1.5, 0.7, 8), lam([0xff5533, 0x33aaff, 0xffcc00][i])); c.position.set(ux, uy + 2.3, uz); sceneRef.add(c);
+        }
+        sign('Strandbad ' + p.name.split(' ')[0], 0.8, bx - sh.dx * 4, getHeight(bx - sh.dx * 4, bz - sh.dz * 4) + 2.4, bz - sh.dz * 4, sh.dx ? Math.PI / 2 : 0);
+        npcSpots.push({ x: bx, z: bz, r: 9, n: 4, kind: 'bad' });
+      }
+    }
+  }
+}
+
+function buildLandmarks(rnd) {
+  // Schloss Kammer am Nordostufer
+  { const sh = shore(KAMMER.x + 14, KAMMER.z) || { x: KAMMER.x, z: KAMMER.z, dx: -1, dz: 0 };
+    const x = sh.x - sh.dx * 16, z = sh.z - sh.dz * 16, Y = Math.max(1.2, getHeight(x, z));
+    sceneRef.add(mkBox(26, 11, 16, 0xfbf6e6, x, Y + 5.5, z)); solid(x, Y - 2, z, 26, 13, 16);
+    const rf = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 1, 1, 4, 1), lam(0x8a3b2a)); rf.scale.set(21, 7, 13); rf.rotation.y = Math.PI / 4; rf.position.set(x, Y + 14.5, z); sceneRef.add(rf);
+    for (const [ox, oz] of [[-13, -8], [13, -8], [-13, 8], [13, 8]]) {
+      const t = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.4, 14, 8), lam(0xfbf6e6)); t.position.set(x + ox, Y + 7, z + oz); t.castShadow = true; sceneRef.add(t);
+      const c = new THREE.Mesh(new THREE.ConeGeometry(2.9, 5, 8), lam(0x8a3b2a)); c.position.set(x + ox, Y + 16.5, z + oz); sceneRef.add(c);
+    }
+    label('Schloss Kammer', x, z, 26, 2.2);
+    for (let i = 1; i <= 6; i++) { tree(x + 14 + i * 9, z - 5, 1.2); tree(x + 14 + i * 9, z + 5, 1.2); }
+    sign('Schlossallee', 0.7, x + 20, Y + 2, z, Math.PI / 2);
+    house(x + 62, z + 22, 14, 9, 5, 0xf4f4f4, 0x55606b, 0); sign('Klimt-Zentrum', 0.9, x + 62, getHeight(x + 62, z + 22) + 3.8, z + 26.7, 0, { bg: '#c9a227', color: '#111' });
+    npcSpots.push({ x: x + 40, z: z + 6, r: 22, n: 5, kind: 'dorf' });
+  }
+  // Pfahlbau-Pavillon Seewalchen
+  { const pl = PLACES.find((p) => p.name.startsWith('Seewalchen')); const sh = shore(pl.x + 30, pl.z + 20);
+    if (sh) { const x = sh.x - sh.dx * 8 + 14, z = sh.z - sh.dz * 8, Y = getHeight(x, z);
+      for (const [ox, oz] of [[-3, -3], [3, -3], [-3, 3], [3, 3]]) sceneRef.add(mkBox(0.3, 3, 0.3, 0x8a5a2f, x + ox, Y + 1.5, z + oz));
+      const c = new THREE.Mesh(new THREE.ConeGeometry(5.5, 2.6, 4), lam(0xb08a4a)); c.rotation.y = Math.PI / 4; c.position.set(x, Y + 4.3, z); sceneRef.add(c);
+      sign('Pfahlbau-Pavillon · UNESCO-Welterbe (Fundstelle im See)', 0.6, x, Y + 1.6, z, 0); } }
+  // Gahberg: Sternwarte, Kapelle, Aussicht
+  { const x = GAHBERG.x, z = GAHBERG.z - 12, Y = getHeight(x, z);
+    sceneRef.add(mkBox(9, 4, 7, 0xe6e6e6, x, Y + 2, z)); solid(x, Y - 2, z, 9, 6, 7);
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(3.2, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), lam(0xf8f8f8)); dome.position.set(x, Y + 4, z); dome.castShadow = true; sceneRef.add(dome);
+    sceneRef.add(mkBox(0.8, 2.6, 0.3, 0x333333, x, Y + 5.6, z + 2.2));
+    label('Sternwarte Gahberg', x, z, 12, 1.8);
+    const kx = x + 22, kz = z + 6, kY = getHeight(kx, kz);
+    house(kx, kz, 4.5, 6, 3.6, 0xfafafa, 0x7a2f2f, 0); sceneRef.add(mkBox(0.2, 1.6, 0.2, 0xe8c040, kx, kY + 7, kz)); sceneRef.add(mkBox(0.9, 0.2, 0.2, 0xe8c040, kx, kY + 7.2, kz));
+    sign('Gahbergkapelle', 0.6, kx, kY + 2.6, kz + 3.2, 0);
+    sign('Aussicht: Attersee · Höllengebirge · Schafberg · Traunstein', 0.6, x - 14, getHeight(x - 14, z + 16) + 1.6, z + 16, 0.6);
+    bench(x - 12, z + 20, 0.6); bench(x - 8, z + 22, 0.6);
+    npcSpots.push({ x, z: z + 14, r: 18, n: 4, kind: 'wander' });
+  }
+  // Schneiderbauerhof (Gahbergstrasse, halbe Hoehe)
+  { let x = SCHNEIDERBAUER.x, z = SCHNEIDERBAUER.z;
+    for (let t = 0; t < 40 && (maskAt(x, z) || maskAt(x + 9, z + 7) || maskAt(x - 9, z - 7)); t++) z -= 2;
+    const Y = getHeight(x, z);
+    house(x, z, 14, 9, 5.5, 0xfaf3e0, 0x6b4a3a, 0); house(x + 17, z - 4, 12, 8, 5, 0x8a5a2f, 0x5c4033, Math.PI / 2);
+    sign('Schneiderbauerhof', 0.9, x, Y + 4.4, z + 4.7, 0);
+    for (let i = 0; i < 5; i++) { const cx = x - 16 - (i % 3) * 5, cz = z - 6 + Math.floor(i / 3) * 6 + i, cy = getHeight(cx, cz);
+      const cow = new THREE.Group(); cow.add(mkBox(0.9, 0.9, 1.9, i % 2 ? 0x6b4a2a : 0xfafafa, 0, 1.0, 0)); cow.add(mkBox(0.5, 0.5, 0.6, 0x6b4a2a, 0, 1.3, 1.15));
+      for (const [lx, lz] of [[-0.3, -0.7], [0.3, -0.7], [-0.3, 0.7], [0.3, 0.7]]) cow.add(mkBox(0.18, 0.6, 0.18, 0x3a2a1e, lx, 0.3, lz));
+      cow.position.set(cx, cy, cz); cow.rotation.y = i * 1.3; sceneRef.add(cow); }
+    for (let i = 0; i < 6; i++) { const hx = x + 4 + (i % 3) * 1.4, hz = z + 8 + Math.floor(i / 3) * 1.5; sceneRef.add(mkBox(0.3, 0.35, 0.45, i % 2 ? 0xffffff : 0xb5651d, hx, getHeight(hx, hz) + 0.25, hz)); }
+    sceneRef.add(mkBox(3, 1.2, 1.2, 0xc9a56b, x - 9, getHeight(x - 9, z + 7) + 0.6, z + 7));
+    npcSpots.push({ x: x + 4, z: z + 9, r: 12, n: 3, kind: 'hof' });
+  }
+  // Noehmer Stein & Beton (Betriebshof am Taleingang)
+  { let x = NOEHMER.x, z = NOEHMER.z - 26; const Y = getHeight(x, z);
+    house(x, z, 20, 10, 6, 0xbfc4c9, 0x55606b, 0); sign('Nöhmer Stein & Beton', 1.1, x, Y + 4.8, z + 5.2, 0, { bg: '#2b3440', color: '#fff' });
+    for (let i = 0; i < 9; i++) { const sx = x - 14 + (i % 5) * 6.5, sz = z + 12 + Math.floor(i / 5) * 6, sy = getHeight(sx, sz);
+      const st = new THREE.Mesh(new THREE.IcosahedronGeometry(1.2 + (i % 3) * 0.5, 0), lam([0x9a9a94, 0xb5b0a4, 0x7d7a74][i % 3])); st.position.set(sx, sy + 0.8, sz); st.castShadow = true; sceneRef.add(st); }
+    for (let i = 0; i < 4; i++) { const sx = x + 14, sz = z + 2 + i * 3.4; sceneRef.add(mkBox(2.6, 1.4, 2.6, 0xc8c2b4, sx, getHeight(sx, sz) + 0.7, sz)); }
+    const kies = new THREE.Mesh(new THREE.ConeGeometry(5, 3.4, 8), lam(0xb9b2a0)); kies.position.set(x - 18, getHeight(x - 18, z) + 1.7, z); sceneRef.add(kies);
+    npcSpots.push({ x: x, z: z + 12, r: 12, n: 3, kind: 'arbeit' });
+  }
+  // Nixenfall im Weissenbachtal
+  { const x = NIXENFALL.x, z = NIXENFALL.z - 30, Y = getHeight(x, z + 14);
+    sceneRef.add(mkBox(16, 30, 6, 0x6f6c66, x, Y + 13, z)); solid(x, Y - 4, z, 16, 34, 6);
+    sceneRef.add(mkBox(2.2, 29, 0.6, 0xcfeaff, x, Y + 13.5, z + 3.2, { transparent: true, opacity: 0.85 }));
+    const pool = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, 0.3, 12), lam(0x3a9ad8)); pool.position.set(x, getHeight(x, z + 8) + 0.3, z + 8); sceneRef.add(pool);
+    const nx = new THREE.Mesh(new THREE.ConeGeometry(0.4, 1.4, 6), lam(0x2a9d8f)); nx.position.set(x + 5, getHeight(x + 5, z + 10) + 0.7, z + 10); sceneRef.add(nx);
+    sign('Nixenfall – Sage: Hier badet die Nixe bei Vollmond', 0.6, x - 5, getHeight(x - 5, z + 14) + 1.6, z + 14, 0);
+    label('Nixenfall', x, z + 4, 34, 1.8);
+    sign('P · Wanderweg Nixenfall', 0.7, x, getHeight(x, NIXENFALL.z + 8) + 1.8, NIXENFALL.z + 8, 0, { bg: '#2f6fd0', color: '#fff' });
+    npcSpots.push({ x, z: z + 16, r: 12, n: 3, kind: 'wander' });
+  }
+  npcSpots.push({ x: 690, z: -905, r: 30, n: 4, kind: 'arbeit' }, { x: -480, z: -590, r: 18, n: 2, kind: 'arbeit' });
 }
 
 function buildAirfield() {
-  const Y = 8;
+  const Y = 6, ox = -380, oz = -280;
   const rw = new THREE.Mesh(new THREE.PlaneGeometry(420, 26), lam(0x3c3f46));
-  rw.rotation.x = -Math.PI / 2; rw.position.set(0, Y + 0.05, -340); rw.receiveShadow = true; sceneRef.add(rw);
+  rw.rotation.x = -Math.PI / 2; rw.position.set(ox, Y + 0.05, oz - 340); rw.receiveShadow = true; sceneRef.add(rw);
   const white = lam(0xf0f0f0);
   for (let i = -9; i <= 9; i++) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(12, 0.9), white);
-    m.rotation.x = -Math.PI / 2; m.position.set(i * 21, Y + 0.08, -340); sceneRef.add(m);
+    m.rotation.x = -Math.PI / 2; m.position.set(ox + i * 21, Y + 0.08, oz - 340); sceneRef.add(m);
   }
   const apron = new THREE.Mesh(new THREE.PlaneGeometry(90, 34), lam(0x4a4e57));
-  apron.rotation.x = -Math.PI / 2; apron.position.set(-180, Y + 0.045, -312); apron.receiveShadow = true; sceneRef.add(apron);
-  // Hangar
-  const hx = -120, hz = -296;
+  apron.rotation.x = -Math.PI / 2; apron.position.set(ox - 180, Y + 0.045, oz - 312); apron.receiveShadow = true; sceneRef.add(apron);
+  const hx = ox - 120, hz = oz - 296;
   sceneRef.add(mkBox(30, 9, 1, 0x8f9aa6, hx, Y + 4.5, hz - 9));
   sceneRef.add(mkBox(1, 9, 18, 0x8f9aa6, hx - 15, Y + 4.5, hz));
   sceneRef.add(mkBox(1, 9, 18, 0x8f9aa6, hx + 15, Y + 4.5, hz));
   sceneRef.add(mkBox(32, 0.8, 20, 0x5f6a75, hx, Y + 9.4, hz));
   solid(hx, Y, hz - 9, 30, 9, 1); solid(hx - 15, Y, hz, 1, 9, 18); solid(hx + 15, Y, hz, 1, 9, 18);
   solid(hx, Y + 9, hz, 32, 0.8, 20);
-  sign('FLUGPLATZ FAULENBACH', 1.6, hx, Y + 11, hz + 10.1, Math.PI, { bg: '#1f2a36', color: '#fff' });
-  // Tower
-  sceneRef.add(mkBox(5, 14, 5, 0xe6e6e6, -70, Y + 7, -296));
-  sceneRef.add(mkBox(8, 3, 8, 0x66c2ff, -70, Y + 15.5, -296, { transparent: true, opacity: 0.75 }));
-  sceneRef.add(mkBox(9, 0.6, 9, 0xcc3333, -70, Y + 17.3, -296));
-  solid(-70, Y, -296, 6, 18, 6);
-  sign('Aufmunitionieren: einfach hier landen & stehenbleiben', 0.8, -150, Y + 2.2, -291.5, Math.PI);
+  sign('FLUGPLATZ ATTERGAU', 1.6, hx, Y + 11, hz + 10.1, Math.PI, { bg: '#1f2a36', color: '#fff' });
+  sceneRef.add(mkBox(5, 14, 5, 0xe6e6e6, ox - 70, Y + 7, oz - 296));
+  sceneRef.add(mkBox(8, 3, 8, 0x66c2ff, ox - 70, Y + 15.5, oz - 296, { transparent: true, opacity: 0.75 }));
+  sceneRef.add(mkBox(9, 0.6, 9, 0xcc3333, ox - 70, Y + 17.3, oz - 296));
+  solid(ox - 70, Y, oz - 296, 6, 18, 6);
+  sign('Aufmunitionieren: einfach hier landen & stehenbleiben', 0.8, ox - 150, Y + 2.2, oz - 291.5, Math.PI);
 }
 
 function buildSite() {
-  const Y = 7;
-  const cx = 230, cz = 120;
-  sign('BAUSTELLE – Graben ausdrücklich erwünscht', 1.2, cx - 40, Y + 3, cz - 52, 0, { bg: '#ffd21f', color: '#222' });
-  sceneRef.add(mkBox(0.3, 3, 0.3, 0x555555, cx - 40, Y + 1.5, cz - 52.2));
-  // Container
-  sceneRef.add(mkBox(6, 2.6, 2.5, 0x2f7fd0, cx - 50, Y + 1.3, cz - 30)); solid(cx - 50, Y, cz - 30, 6, 2.6, 2.5);
-  sceneRef.add(mkBox(6, 2.6, 2.5, 0xd04a2f, cx - 50, Y + 1.3, cz - 24)); solid(cx - 50, Y, cz - 24, 6, 2.6, 2.5);
-  // Huetchen
+  const Y = 5, cx = 690, cz = -905;
+  sign('BAUSTELLE – Graben ausdrücklich erwünscht', 1.2, cx, Y + 3, cz + 44, 0, { bg: '#ffd21f', color: '#222' });
+  sceneRef.add(mkBox(6, 2.6, 2.5, 0x2f7fd0, cx - 44, Y + 1.3, cz - 30)); solid(cx - 44, Y, cz - 30, 6, 2.6, 2.5);
+  sceneRef.add(mkBox(6, 2.6, 2.5, 0xd04a2f, cx - 44, Y + 1.3, cz - 24)); solid(cx - 44, Y, cz - 24, 6, 2.6, 2.5);
   for (let i = 0; i < 10; i++) {
     const c = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.8, 6), lam(0xff6a1a));
-    c.position.set(cx - 55 + i * 5, Y + 0.4, cz - 45); sceneRef.add(c);
+    c.position.set(cx - 25 + i * 5, Y + 0.4, cz + 40); sceneRef.add(c);
   }
-  // Dixi-Klo
-  sceneRef.add(mkBox(1.4, 2.4, 1.4, 0x2a9d8f, cx - 42, Y + 1.2, cz - 36)); solid(cx - 42, Y, cz - 36, 1.4, 2.4, 1.4);
+  sceneRef.add(mkBox(1.4, 2.4, 1.4, 0x2a9d8f, cx - 40, Y + 1.2, cz - 38)); solid(cx - 40, Y, cz - 38, 1.4, 2.4, 1.4);
+  for (let i = 0; i < 5; i++) { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 6, 8), lam(0x9a9a94)); p.rotation.z = Math.PI / 2; p.position.set(cx + 36, Y + 0.6 + Math.floor(i / 3) * 1.1, cz - 30 + (i % 3) * 1.3); sceneRef.add(p); }
 }
 
 function buildTrees() {
   const rnd = mulberry(4711);
   const V = GRID + 1;
   const list = [];
-  for (let n = 0; n < 9000 && list.length < 1500; n++) {
-    const gi = 6 + Math.floor(rnd() * (GRID - 12)), gj = 6 + Math.floor(rnd() * (GRID - 12));
+  for (let n = 0; n < 60000 && list.length < 5200; n++) {
+    const gi = 4 + Math.floor(rnd() * (GRID - 8)), gj = 4 + Math.floor(rnd() * (GRID - 8));
     const idx = gi + gj * V;
     const h = heights[idx];
     const x = (gi - GRID / 2) * CELL, z = (gj - GRID / 2) * CELL;
-    if (h < 2.2 || h > 36) continue;
+    if (h < 1.3 || h > 82 || mask[idx] || mask[idx + 1] || mask[idx - 1] || mask[idx + V] || mask[idx - V]) continue;
+    if (h < 14 && rnd() > 0.16) continue;
     let bad = false;
-    for (const zn of ZONES) if (Math.abs(x - zn.x) < zn.rx + 14 && Math.abs(z - zn.z) < zn.rz + 14) bad = true;
+    for (const zn of ZONES) if (Math.abs(x - zn.x) < zn.rx + 8 && Math.abs(z - zn.z) < zn.rz + 8) bad = true;
     if (bad) continue;
-    if (Math.abs(heights[idx + 1] - heights[idx - 1]) > 3 || Math.abs(heights[idx + V] - heights[idx - V]) > 3) continue;
-    list.push({ idx, x, y: h, z, s: 0.8 + rnd() * 0.9, round: h < 16 && rnd() < 0.55, c: rnd() });
+    if (Math.abs(heights[idx + 1] - heights[idx - 1]) > 9 || Math.abs(heights[idx + V] - heights[idx - V]) > 9) continue;
+    if (pointInBoxes(x, h + 1, z, 2.5)) continue;
+    list.push({ idx, x, y: h, z, s: 0.8 + rnd() * 0.9, round: h < 22 && rnd() < 0.5, c: rnd() });
   }
   const trunkG = new THREE.CylinderGeometry(0.22, 0.34, 2.4, 5);
   const coneG = new THREE.ConeGeometry(1.7, 4.6, 6);
@@ -368,17 +548,24 @@ export function initWorld(scene, lowGfx) {
   sc.left = -70; sc.right = 70; sc.top = 70; sc.bottom = -70; sc.near = 10; sc.far = 400;
   sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.6;
   scene.add(sun); scene.add(sun.target);
-  scene.fog = new THREE.Fog(0x9fd6ff, 250, 1500);
+  scene.fog = new THREE.Fog(0x9fd6ff, 350, 2600);
   scene.background = new THREE.Color(0x9fd6ff);
 
-  water = new THREE.Mesh(new THREE.PlaneGeometry(9000, 9000), new THREE.MeshLambertMaterial({ color: 0x2f8fd6, transparent: true, opacity: 0.82 }));
-  water.rotation.x = -Math.PI / 2; water.position.y = 0;
+  water = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1500), new THREE.MeshLambertMaterial({ color: 0x35b3c9, transparent: true, opacity: 0.8 }));
+  water.rotation.x = -Math.PI / 2; water.position.set(-200, 0, 180);
   scene.add(water);
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(9000, 9000), lam(0x1d5f96));
-  floor.rotation.x = -Math.PI / 2; floor.position.y = -13.9;
-  scene.add(floor);
-
-  buildTown(); buildAirfield(); buildSite(); buildTrees(); buildClouds();
+  for (const [ox, oz, w, d] of [[0, -HALF - 3000, 12000, 6000], [0, HALF + 3000, 12000, 6000], [-HALF - 3000, 0, 6000, HALF * 2], [HALF + 3000, 0, 6000, HALF * 2]]) {
+    const outer = new THREE.Mesh(new THREE.PlaneGeometry(w, d), lam(0x4f8a3c));
+    outer.rotation.x = -Math.PI / 2; outer.position.set(ox, 3.9, oz);
+    scene.add(outer);
+  }
+  // Fernkulisse: Hoellengebirge, Schafberg, Traunstein
+  for (const [mx, mz, r, hh, c] of [[900, 1500, 520, 330, 0x8a8d92], [300, 1600, 480, 300, 0x94979c], [1700, 1100, 520, 300, 0x8a8d92], [-900, 1500, 380, 260, 0x7f8f88], [2300, 300, 420, 290, 0x8f9298], [1500, 1700, 600, 380, 0x9a9da2]]) {
+    const m = new THREE.Mesh(new THREE.ConeGeometry(r, hh, 7), lam(c)); m.position.set(mx, hh / 2, mz); scene.add(m);
+    const sn = new THREE.Mesh(new THREE.ConeGeometry(r * 0.3, hh * 0.3, 7), lam(0xf4f6fa)); sn.position.set(mx, hh * 0.86, mz); scene.add(sn);
+  }
+  const rnd = mulberry(2024);
+  buildRoadsRivers(); buildVoecklabruck(rnd); buildVillages(rnd); buildLandmarks(rnd); buildAirfield(); buildSite(); buildTrees(); buildClouds();
 }
 
 const cDay = new THREE.Color(0x8fd0ff), cDusk = new THREE.Color(0xf7a35c), cNight = new THREE.Color(0x0c1230), cTmp = new THREE.Color();

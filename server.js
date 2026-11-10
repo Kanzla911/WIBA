@@ -16,11 +16,12 @@ const MIME = {
 const VEH_HP = { bagger: 400, auto: 200, flieger: 150, jet: 220 };
 const E = Math.PI / 2; // Blick nach Osten (+X)
 const VEHICLE_SPAWNS = [
-  ['bagger', 210, 7, 100, 0], ['bagger', 230, 7, 100, 0], ['bagger', 250, 7, 100, 0],
-  ['bagger', 56, 6, 52, 0],
-  ['auto', -12, 6, 50, 0], ['auto', -19, 6, 50, 0], ['auto', 200, 7, 150, E], ['auto', -150, 8, -296, E],
-  ['flieger', -195, 8, -312, E], ['flieger', -195, 8, -324, E],
-  ['jet', -195, 8, -340, E], ['jet', -195, 8, -356, E], ['jet', -170, 8, -348, E],
+  ['bagger', 670, 5, -905, 0], ['bagger', 690, 5, -905, 0], ['bagger', 710, 5, -905, 0],
+  ['bagger', 300, 5, -800, 0], ['bagger', -80, 8, 434, 0],
+  ['auto', 396, 5, -914, E], ['auto', 388, 5, -914, E], ['auto', 690, 5, -872, 0], ['auto', -530, 6, -576, E],
+  ['auto', 120, 6, -372, 0], ['auto', -30, 4, -30, 0], ['auto', -135, 4, 520, 0], ['auto', 84, 50, -140, 0],
+  ['flieger', -575, 6, -592, E], ['flieger', -575, 6, -604, E],
+  ['jet', -575, 6, -620, E], ['jet', -575, 6, -636, E], ['jet', -550, 6, -628, E],
 ];
 
 function num(v, d = 0) { return typeof v === 'number' && Number.isFinite(v) ? v : d; }
@@ -134,7 +135,7 @@ function startServer(opts = {}) {
   wss.on('connection', (ws) => {
     const p = {
       id: nextId++, ws, joined: false, name: 'Hawara', color: 0xffcc00,
-      p: [0, 6, 20], yaw: 0, pitch: 0, a: 0, w: '', v: 0,
+      p: [410, 5, -893], yaw: 0, pitch: 0, a: 0, w: '', v: 0,
       hp: 100, dead: false, k: 0, d: 0, wiba: 0,
     };
     players.set(p.id, p);
@@ -183,7 +184,7 @@ function startServer(opts = {}) {
           for (const e of m.e.slice(0, 400)) {
             if (!Array.isArray(e)) continue;
             const i = num(e[0], -1) | 0, h = r2(num(e[1]));
-            if (i < 0 || i > 200000 || h < -60 || h > 200) continue;
+            if (i < 0 || i > 300000 || h < -60 || h > 400) continue;
             digs.set(i, h); out.push([i, h]);
           }
           if (out.length) { dirty = true; broadcast({ t: 'dig', e: out }, ws); }
@@ -333,7 +334,7 @@ module.exports = { startServer };
 
 if (require.main === module) {
   const port = parseInt(process.env.PORT || process.argv[2] || '31337', 10);
-  startServer({ port, saveFile: path.join(__dirname, 'world-save.json') }).then((s) => {
+  startServer({ port, saveFile: path.join(__dirname, 'world-save-v2.json') }).then((s) => {
     console.log('WIBA-Server laeuft auf Port ' + s.port);
     console.log('Lokal:    http://localhost:' + s.port);
     for (const ip of s.ips) console.log('Netzwerk: ' + ip + ':' + s.port);
