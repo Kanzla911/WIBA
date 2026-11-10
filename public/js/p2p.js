@@ -32,7 +32,12 @@ export function startHost(localWsUrl) {
       ws.onclose = close; ws.onerror = close;
       conn.on('close', close); conn.on('error', close);
     });
-    peer.on('disconnected', () => { if (!peer.destroyed) { set('verbindet'); try { peer.reconnect(); } catch (e) { /* */ } } });
+    let retry = null;
+    peer.on('disconnected', () => {
+      if (peer.destroyed || retry) return;
+      set(host.code ? 'verbindet' : 'kein Internet');
+      retry = setTimeout(() => { retry = null; if (!peer.destroyed && peer.disconnected) { try { peer.reconnect(); } catch (e) { /* */ } } }, 8000);
+    });
     peer.on('error', (e) => {
       if (e && e.type === 'unavailable-id' && tries < 4) { try { peer.destroy(); } catch (x) { /* */ } host.peer = null; code = newCode(); open(tries + 1); }
       else if (e && (e.type === 'network' || e.type === 'server-error' || e.type === 'socket-error' || e.type === 'socket-closed')) set('kein Internet');
