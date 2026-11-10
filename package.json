@@ -1,0 +1,56 @@
+{
+  "name": "wiba",
+  "version": "1.0.0",
+  "description": "WIBA - Wichsen und Baggerfahren. Das Multiplayer-Open-World-Spiel uebers Nichtstun.",
+  "main": "main.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron .",
+    "server": "node server.js",
+    "dist": "electron-builder --win portable --x64 --publish never",
+    "test": "node test/smoke.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.22.2"
+  },
+  "author": "WIBA",
+  "devDependencies": {
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "at.wiba.game",
+    "productName": "WIBA",
+    "files": [
+      "main.js",
+      "server.js",
+      "public/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "WIBA.exe"
+    },
+    "electronLanguages": [
+      "de",
+      "en-US"
+    ]
+  }
+}

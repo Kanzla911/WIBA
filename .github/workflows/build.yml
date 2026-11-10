@@ -1,0 +1,52 @@
+name: WIBA.exe bauen
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wiba-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Abhaengigkeiten installieren
+        run: npm ci
+
+      - name: Server-Schnelltest
+        run: node test/smoke.js
+
+      - name: WIBA.exe bauen
+        run: npm run dist
+
+      - name: WIBA.exe als Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: WIBA-Windows
+          path: dist/WIBA.exe
+          if-no-files-found: error
+
+      - name: Release mit Download aktualisieren
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: wiba-latest
+          name: WIBA – aktuelle Version
+          body: |
+            **WIBA.exe** herunterladen, doppelklicken, spielen. Keine Installation noetig.
+
+            Automatisch gebaut aus Commit ${{ github.sha }}.
+          files: dist/WIBA.exe
+          make_latest: true

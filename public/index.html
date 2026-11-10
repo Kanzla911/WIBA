@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WIBA</title>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
+<style>
+  :root { --y: #ffd21f; --k: #15181d; --p: rgba(18,21,27,.82); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #101418; color: #fff;
+    font-family: "Trebuchet MS", "Segoe UI", Arial, sans-serif; user-select: none; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .hidden { display: none !important; }
+  button { font: inherit; cursor: pointer; }
+
+  /* Startbildschirm */
+  #start { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(1200px 700px at 50% 30%, #38546e 0%, #17202b 60%, #0d1117 100%); }
+  #start .card { width: min(560px, 92vw); background: var(--p); border: 3px solid var(--y); border-radius: 18px; padding: 26px 30px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+  #start h1 { margin: 0; font-size: 84px; letter-spacing: 6px; color: var(--y); text-shadow: 4px 4px 0 #000; line-height: 1; text-align: center; }
+  #start .sub { text-align: center; font-size: 17px; margin: 6px 0 2px; }
+  #start .sub2 { text-align: center; opacity: .7; font-size: 13px; margin-bottom: 16px; }
+  .stripe { height: 12px; margin: 12px -30px 16px; background: repeating-linear-gradient(-45deg, var(--y) 0 16px, #111 16px 32px); }
+  label { display: block; font-size: 13px; opacity: .85; margin: 10px 0 4px; }
+  input[type=text] { width: 100%; padding: 10px 12px; border-radius: 9px; border: 2px solid #3a4452; background: #0e1217; color: #fff; font: inherit; font-size: 16px; outline: none; }
+  input[type=text]:focus { border-color: var(--y); }
+  #colors { display: flex; gap: 8px; }
+  #colors div { width: 30px; height: 30px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; }
+  #colors div.sel { border-color: #fff; transform: scale(1.12); }
+  .row { display: flex; gap: 10px; margin-top: 14px; }
+  .btn { flex: 1; padding: 13px 10px; border-radius: 11px; border: none; background: var(--y); color: #111; font-weight: bold; font-size: 17px;
+    box-shadow: 0 4px 0 #a88600; }
+  .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #a88600; }
+  .btn.alt { background: #3a4452; color: #fff; box-shadow: 0 4px 0 #1f2630; }
+  #status { min-height: 20px; margin-top: 12px; font-size: 14px; color: #ffb3a0; text-align: center; }
+  #hostinfo { font-size: 13px; opacity: .8; margin-top: 8px; text-align: center; user-select: text; }
+
+  /* HUD */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+  #minimapWrap { position: absolute; left: 14px; top: 14px; }
+  #minimap { width: 190px; height: 190px; border-radius: 12px; border: 3px solid var(--k); box-shadow: 0 0 0 2px var(--y); display: block; background: #234; }
+  #loc { margin-top: 8px; background: var(--p); padding: 4px 10px; border-radius: 8px; font-size: 13px; display: inline-block; }
+  #stats { position: absolute; left: 14px; bottom: 84px; width: 270px; background: var(--p); border-radius: 12px; padding: 10px 12px; font-size: 14px; }
+  .bar { height: 16px; border-radius: 8px; background: #2a2f38; overflow: hidden; margin-bottom: 7px; position: relative; }
+  .bar > div { height: 100%; background: linear-gradient(#ff5d4a, #d8301e); width: 100%; transition: width .15s; }
+  .bar span { position: absolute; inset: 0; text-align: center; font-size: 11px; line-height: 16px; font-weight: bold; }
+  #stats .line { display: flex; justify-content: space-between; margin-top: 2px; }
+  #effects { margin-top: 4px; font-size: 12px; color: #ffe89a; min-height: 15px; }
+  #hotbar { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; gap: 5px; }
+  .slot { width: 50px; height: 50px; background: var(--p); border: 2px solid #3a4452; border-radius: 10px; position: relative;
+    display: flex; align-items: center; justify-content: center; font-size: 24px; flex: none; }
+  .slot.sel { border-color: var(--y); background: rgba(70,60,10,.85); transform: translateY(-5px); }
+  .slot i { position: absolute; left: 4px; top: 2px; font-size: 10px; font-style: normal; opacity: .7; }
+  .slot b { position: absolute; right: 4px; bottom: 1px; font-size: 11px; }
+  #heldname { position: absolute; left: 50%; bottom: 74px; transform: translateX(-50%); font-size: 14px; text-shadow: 0 1px 3px #000; white-space: nowrap; }
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 2px rgba(0,0,0,.6); }
+  #aim { position: absolute; width: 34px; height: 34px; margin: -17px 0 0 -17px; border: 2px solid #7dff7d; border-radius: 50%; box-shadow: 0 0 4px #000; }
+  #aim::after { content: ''; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; background: #7dff7d; border-radius: 50%; }
+  #hitmark { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); font-size: 26px; color: #fff; opacity: 0; transition: opacity .25s; text-shadow: 0 0 4px #f00; }
+  #prompt { position: absolute; left: 50%; top: 60%; transform: translateX(-50%); background: var(--p); padding: 7px 14px; border-radius: 9px; font-size: 15px; border: 1px solid var(--y); white-space: nowrap; }
+  #wibabar { position: absolute; left: 50%; top: 68%; transform: translateX(-50%); width: 260px; text-align: center; font-size: 13px; text-shadow: 0 1px 2px #000; }
+  #wibabar .bar > div { background: linear-gradient(#ffe45a, #f2b90f); transition: none; }
+  #feed { position: absolute; right: 14px; top: 14px; text-align: right; font-size: 14px; }
+  #feed div { background: var(--p); padding: 4px 10px; border-radius: 7px; margin-bottom: 4px; display: inline-block; clear: both; float: right; }
+  #chatlog { position: absolute; left: 14px; top: 250px; width: 360px; font-size: 14px; text-shadow: 0 1px 2px #000; }
+  #chatlog div { margin-bottom: 2px; background: rgba(0,0,0,.28); padding: 2px 7px; border-radius: 5px; display: inline-block; clear: both; float: left; max-width: 100%; word-wrap: break-word; }
+  #chatinput { position: absolute; left: 14px; top: 420px; width: 360px; pointer-events: auto; }
+  #toasts { position: absolute; left: 50%; top: 16%; transform: translateX(-50%); text-align: center; }
+  #toasts div { background: var(--p); border-left: 4px solid var(--y); padding: 7px 16px; border-radius: 8px; margin-bottom: 6px; font-size: 16px; animation: pop .2s; }
+  #toasts div.bad { border-color: #ff5d4a; }
+  #toasts div.good { border-color: #6fe06f; }
+  @keyframes pop { from { transform: scale(.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  #vehhud { position: absolute; right: 14px; bottom: 84px; background: var(--p); border-radius: 12px; padding: 10px 14px; font-size: 14px; min-width: 250px; line-height: 1.5; }
+  #vehhud h3 { margin: 0 0 4px; color: var(--y); font-size: 16px; }
+  #vehhud small { opacity: .75; display: block; margin-top: 5px; line-height: 1.35; }
+  #vignette { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .2s; box-shadow: inset 0 0 180px 60px rgba(220,0,0,.75); }
+  #tint { position: absolute; inset: 0; pointer-events: none; opacity: 0; }
+  #black { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 30; transition: opacity .8s; display: flex; align-items: center; justify-content: center; font-size: 30px; }
+  #death { position: fixed; inset: 0; z-index: 31; background: rgba(90,0,0,.55); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+  #death h2 { font-size: 64px; margin: 0; text-shadow: 3px 3px 0 #000; }
+  #death p { font-size: 20px; }
+
+  /* Menues */
+  #menu { position: fixed; z-index: 40; left: 50%; top: 50%; transform: translate(-50%,-50%); width: min(620px, 94vw); max-height: 84vh; overflow: auto;
+    background: var(--p); border: 3px solid var(--y); border-radius: 16px; padding: 18px 22px; pointer-events: auto; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+  #menu h2 { margin: 0 0 2px; color: var(--y); }
+  #menu .hint { opacity: .75; font-style: italic; margin-bottom: 12px; }
+  #menu h4 { margin: 14px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; opacity: .7; }
+  .item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 9px; background: rgba(255,255,255,.06); margin-bottom: 5px; }
+  .item .ic { font-size: 24px; width: 32px; text-align: center; }
+  .item .nm { flex: 1; }
+  .item .nm small { display: block; opacity: .65; font-size: 12px; }
+  .item button { padding: 7px 12px; border-radius: 8px; border: none; background: var(--y); color: #111; font-weight: bold; min-width: 92px; }
+  .item button:disabled { background: #4a4f58; color: #999; cursor: default; }
+  #menu .foot { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
+  .inv { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px; }
+  .inv div { background: rgba(255,255,255,.06); border-radius: 8px; padding: 7px 9px; font-size: 14px; }
+  #score { position: fixed; z-index: 35; left: 50%; top: 50%; transform: translate(-50%,-50%); width: min(560px, 92vw); background: var(--p); border: 3px solid var(--y); border-radius: 16px; padding: 16px 20px; }
+  #score h2 { margin: 0 0 10px; color: var(--y); text-align: center; }
+  #score table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  #score th { text-align: left; opacity: .65; font-size: 12px; text-transform: uppercase; padding: 4px 6px; }
+  #score td { padding: 5px 6px; border-top: 1px solid rgba(255,255,255,.1); }
+  #score tr.me td { color: var(--y); font-weight: bold; }
+  #help { position: fixed; z-index: 45; left: 50%; top: 50%; transform: translate(-50%,-50%); width: min(760px, 95vw); max-height: 90vh; overflow: auto; background: var(--p); border: 3px solid var(--y); border-radius: 16px; padding: 18px 24px; font-size: 14px; line-height: 1.5; }
+  #help h2 { margin: 0 0 8px; color: var(--y); }
+  #help .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 26px; }
+  #help h4 { margin: 10px 0 3px; color: var(--y); }
+  kbd { background: #0e1217; border: 1px solid #556; border-bottom-width: 3px; border-radius: 5px; padding: 0 6px; font-family: inherit; font-size: 12px; }
+  #clickhint { position: fixed; z-index: 20; left: 50%; top: 42%; transform: translate(-50%,-50%); background: var(--p); border: 2px solid var(--y); padding: 14px 24px; border-radius: 12px; font-size: 18px; text-align: center; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="tint"></div>
+  <div id="vignette"></div>
+  <div id="minimapWrap"><canvas id="minimap" width="190" height="190"></canvas><br><div id="loc"></div></div>
+  <div id="chatlog"></div>
+  <input id="chatinput" class="hidden" type="text" maxlength="160" placeholder="Nachricht… (Enter = senden)">
+  <div id="feed"></div>
+  <div id="toasts"></div>
+  <div id="crosshair"></div>
+  <div id="aim" class="hidden"></div>
+  <div id="hitmark">✕</div>
+  <div id="prompt" class="hidden"></div>
+  <div id="wibabar" class="hidden"><div class="bar"><div id="wibafill"></div></div><span id="wibatext">Banane wird auf Hochglanz gewichst…</span></div>
+  <div id="heldname"></div>
+  <div id="hotbar"></div>
+  <div id="stats">
+    <div class="bar"><div id="hpfill"></div><span id="hptext">100</span></div>
+    <div class="line"><span>💶 <b id="money">0</b> €</span><span>🍌 WIBA-Punkte: <b id="wiba">0</b></span></div>
+    <div class="line"><span id="ammo"></span><span id="promille"></span></div>
+    <div id="effects"></div>
+  </div>
+  <div id="vehhud" class="hidden"></div>
+</div>
+
+<div id="clickhint" class="hidden">🖱️ Klicken zum Spielen<br><small>F1 = Hilfe · ESC = Maus freigeben</small></div>
+<div id="menu" class="hidden"></div>
+<div id="score" class="hidden"></div>
+<div id="death" class="hidden"><h2>HIN IST HIN</h2><p id="deathtext"></p><p id="deathtimer"></p></div>
+<div id="black"></div>
+
+<div id="help" class="hidden">
+  <h2>WIBA – Steuerung</h2>
+  <div class="cols">
+    <div>
+      <h4>Zu Fuß</h4>
+      <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> gehen · <kbd>Shift</kbd> rennen · <kbd>Leertaste</kbd> springen / Fallschirm<br>
+      <kbd>1</kbd>–<kbd>9</kbd> / Mausrad: Gegenstand wählen<br>
+      <kbd>Linksklick</kbd> benutzen / schießen / graben<br>
+      <kbd>Rechtsklick</kbd> zielen · Schaufel: auffüllen<br>
+      <kbd>R</kbd> nachladen · Bauteil drehen<br>
+      <kbd>E</kbd> einsteigen / Laden öffnen<br>
+      <kbd>I</kbd> Inventar · <kbd>Tab</kbd> Rangliste · <kbd>Enter</kbd> Chat
+      <h4>Bagger</h4>
+      <kbd>W</kbd><kbd>S</kbd> fahren · <kbd>A</kbd><kbd>D</kbd> lenken<br>
+      Maus: Oberwagen drehen / Arm aus- und einfahren<br>
+      <kbd>Linksklick</kbd> graben · <kbd>Rechtsklick</kbd> Erde abladen<br>
+      <kbd>H</kbd> Hupe · <kbd>E</kbd> aussteigen
+    </div>
+    <div>
+      <h4>Flieger &amp; Kampfjet</h4>
+      <kbd>W</kbd><kbd>S</kbd> Schub rauf/runter<br>
+      Maus (oder Pfeiltasten): zurückziehen = Nase hoch, seitlich = rollen<br>
+      <kbd>A</kbd><kbd>D</kbd> Seitenruder<br>
+      <kbd>Linksklick</kbd> Bord-MG (Jet) · <kbd>Rechtsklick</kbd> Rakete (Jet)<br>
+      <kbd>Leertaste</kbd> Bombe abwerfen<br>
+      <kbd>E</kbd> aussteigen – in der Luft = Schleudersitz!
+      <h4>Ziel des Spiels</h4>
+      Möglichst wenig tun. WIBA-Punkte gibt’s fürs Banane-Wichsen (auf Hochglanz polieren, eh klar) und fürs Im-Bagger-Sitzen.
+      Nebenbei: Erz graben, Waffen schmieden, Bunker bauen, andere ärgern.
+      <h4>Sonstiges</h4>
+      <kbd>F1</kbd> Hilfe · <kbd>F11</kbd> Vollbild · <kbd>ESC</kbd> Maus freigeben
+    </div>
+  </div>
+</div>
+
+<div id="start">
+  <div class="card">
+    <h1>WIBA</h1>
+    <div class="sub">Wichsen &amp; Baggerfahren</div>
+    <div class="sub2">Das Multiplayer-Open-World-Spiel übers Nichtstun</div>
+    <div class="stripe"></div>
+    <label>Dein Name</label>
+    <input id="name" type="text" maxlength="16" placeholder="Hawara">
+    <label>Helmfarbe</label>
+    <div id="colors"></div>
+    <div class="row"><button class="btn" id="btnHost">🏗️ Spiel hosten / Solo</button></div>
+    <label>Bei Freund beitreten (IP-Adresse des Hosts)</label>
+    <div class="row" style="margin-top:0">
+      <input id="ip" type="text" placeholder="z. B. 192.168.0.42" style="flex:2">
+      <button class="btn alt" id="btnJoin">🤝 Beitreten</button>
+    </div>
+    <div class="row"><button class="btn alt" id="btnGfx" style="font-size:14px;padding:9px">🖥️ Grafik: Hoch</button></div>
+    <div id="status"></div>
+    <div id="hostinfo"></div>
+  </div>
+</div>
+
+<script type="module" src="./js/game.js"></script>
+</body>
+</html>
