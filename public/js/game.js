@@ -43,7 +43,7 @@ const vm = new THREE.Group();
 vm.position.set(0.34, -0.34, -0.62);
 camera.add(vm);
 let vmItem = null, vmId = null;
-const vmCloth = mkBox(0.12, 0.03, 0.14, 0xffffff, -0.02, 0.06, -0.05);
+const vmCloth = mkBox(0.1, 0.025, 0.1, 0xf4f4f4, -0.02, 0.06, -0.05);
 vmCloth.visible = false; vmCloth.castShadow = false; vm.add(vmCloth);
 function setViewItem(id) {
   if (id === vmId) return;
@@ -52,7 +52,7 @@ function setViewItem(id) {
   vmItem = id ? makeItem(id) : null;
   if (vmItem) {
     vmItem.traverse((o) => { o.castShadow = false; o.receiveShadow = false; });
-    if (id === 'banane') { vmItem.scale.setScalar(1.6); vmItem.position.set(-0.05, 0.3, 0); }
+    if (id === 'banane') { vmItem.scale.setScalar(1.5); vmItem.rotation.set(0.35, 0.5, -0.5); vmItem.position.set(-0.04, 0.08, 0.05); }
     else if (id === 'schaufel') { vmItem.scale.setScalar(0.5); vmItem.rotation.x = 1.1; vmItem.position.set(0.14, -0.42, 0.05); }
     else if (id === 'platte' || id === 'wand') { vmItem.position.set(0, 0.05, 0); }
     else if (ITEMS[id].use && id !== 'granate') { vmItem.scale.setScalar(1.5); }
@@ -613,9 +613,11 @@ function updateHeld(dt, ctl) {
   vm.rotation.set(me.recoil * 0.22 - vmSwing * 0.9 + me.useT * 0.5, 0, 0);
   vmCloth.visible = polishing;
   if (polishing) {
-    vm.position.x = 0.12; vm.position.y = -0.3;
-    vmCloth.position.set(-0.02 + Math.sin(G.time * 26) * 0.09, 0.02, -0.06);
-    vm.rotation.z = Math.sin(G.time * 26) * 0.05;
+    vm.position.x = 0.16; vm.position.y = -0.26;
+    const ph = Math.sin(G.time * 26);
+    vmCloth.position.set(-0.04 - ph * 0.05, 0.1 + ph * 0.03, -0.02 - ph * 0.07);
+    vmCloth.rotation.set(0.3, 0.5, -0.5);
+    vm.rotation.z = ph * 0.04;
   }
   if (me.reloadT > 0) vm.rotation.x = -0.6;
 }

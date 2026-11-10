@@ -19,15 +19,15 @@ export function makeItem(id) {
       break;
     }
     case 'banane': {
-      for (let i = 0; i < 6; i++) {
-        const a = -0.6 + i * 0.24;
-        const s = cyl(i === 0 || i === 5 ? 0.03 : 0.05, i === 0 || i === 5 ? 0.045 : 0.05, 0.11, 6, i === 0 ? 0x6b4a1a : 0xffdd22, 0, Math.cos(a) * 0.3 - 0.28, -Math.sin(a) * 0.3,
-          { emissive: 0x000000 });
-        s.rotation.x = -a + Math.PI / 2;
-        s.userData.peel = i !== 0;
+      const R = 0.17;
+      for (let i = 0; i < 7; i++) {
+        const a = -0.75 + i * 0.25;
+        const tip = i === 0 || i === 6;
+        const s = cyl(tip ? 0.014 : 0.03, tip ? 0.022 : 0.03, 0.058, 6, i === 0 ? 0x5a3d16 : (i === 6 ? 0x8a7a2a : 0xffd92e),
+          0, Math.cos(a) * R - R, -Math.sin(a) * R);
+        s.rotation.x = -a - Math.PI / 2;
         g.add(s);
       }
-      g.rotation.x = 0.3;
       break;
     }
     case 'pistole':
