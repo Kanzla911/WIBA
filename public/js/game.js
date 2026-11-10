@@ -22,10 +22,12 @@ const _d = new THREE.Vector3(), _r = new THREE.Vector3(), _u = new THREE.Vector3
 let lowGfx = false;
 try { lowGfx = localStorage.getItem('wiba-gfx') === 'low'; } catch (e) { /* */ }
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !lowGfx, powerPreference: 'high-performance' });
-renderer.setPixelRatio(lowGfx ? 0.8 : Math.min(window.devicePixelRatio || 1, 1.5));
+renderer.setPixelRatio(lowGfx ? 0.8 : Math.min(window.devicePixelRatio || 1, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = !lowGfx;
 renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 5000);
 camera.rotation.order = 'YXZ';

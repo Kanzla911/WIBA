@@ -1,6 +1,7 @@
 // WIBA - Gelaende: Hoehenkarte, Chunks, Graben/Auffuellen
 import * as THREE from 'three';
 import { CELL, GRID, HALF } from './config.js';
+import { tex } from './tex.js';
 import { ZONES, HILLS, VALLEY, ROADS, RIVERS, lakeDist, samplePath, placeName } from './geo.js';
 
 const V = GRID + 1;
@@ -193,7 +194,7 @@ export function vertexColor(i, out) {
     else if (h < -0.4) { const dd = Math.min(1, -h / 8); r = 0.8 - 0.68 * dd; g = 0.8 - 0.42 * dd; b = 0.6 - 0.12 * dd; }
     else if (h < 0.7) { r = 0.86; g = 0.8; b = 0.56; }
     else if (h > 135) { r = 0.95; g = 0.96; b = 1.0; }
-    else if (h > 78 || slope > 0.95) { r = 0.56; g = 0.55; b = 0.53; }
+    else if (h > 78 + n * 10 || slope > 0.95) { const q = 0.9 + n * 0.25; r = 0.62 * q; g = 0.6 * q; b = 0.56 * q; }
     else if (zn && zn.name.startsWith('Baustelle')) { r = 0.66; g = 0.54; b = 0.36; }
     else if (h < 15 && slope < 0.12 && !zn) {
       const f = hash2(Math.floor(x / 44) + 900, Math.floor(z / 44) + 300);
@@ -202,7 +203,7 @@ export function vertexColor(i, out) {
     } else {
       const t = fbm(x / 60 + 5, z / 60 + 9);
       const k = Math.min(1, h / 60);
-      r = 0.33 + 0.14 * t - 0.08 * k; g = 0.6 + 0.1 * t - 0.12 * k; b = 0.22 + 0.06 * t;
+      r = 0.36 + 0.14 * t - 0.12 * k; g = 0.58 + 0.1 * t - 0.16 * k; b = 0.2 + 0.05 * t - 0.03 * k;
     }
   }
   const v = 0.94 + n * 0.12;
@@ -213,7 +214,9 @@ export function vertexColor(i, out) {
 function buildChunk(ch) {
   const pos = ch.geo.attributes.position.array;
   const col = ch.geo.attributes.color.array;
-  let k = 0;
+  const nor = ch.geo.attributes.normal.array;
+  const uv = ch.geo.attributes.uv.array;
+  let k = 0, u = 0;
   for (let j = 0; j <= CH; j++) {
     for (let i = 0; i <= CH; i++) {
       const gi = ch.cx * CH + i, gj = ch.cz * CH + j;
@@ -223,11 +226,18 @@ function buildChunk(ch) {
       pos[k + 2] = (gj - GRID / 2) * CELL;
       vertexColor(idx, _c);
       col[k] = _c[0]; col[k + 1] = _c[1]; col[k + 2] = _c[2];
+      const nx = heights[gi > 0 ? idx - 1 : idx] - heights[gi < GRID ? idx + 1 : idx];
+      const nz = heights[gj > 0 ? idx - V : idx] - heights[gj < GRID ? idx + V : idx];
+      const nl = Math.hypot(nx, 2 * CELL, nz);
+      nor[k] = nx / nl; nor[k + 1] = (2 * CELL) / nl; nor[k + 2] = nz / nl;
+      uv[u++] = pos[k] / 9; uv[u++] = pos[k + 2] / 9;
       k += 3;
     }
   }
   ch.geo.attributes.position.needsUpdate = true;
   ch.geo.attributes.color.needsUpdate = true;
+  ch.geo.attributes.normal.needsUpdate = true;
+  ch.geo.attributes.uv.needsUpdate = true;
   ch.geo.computeBoundingSphere();
   ch.geo.computeBoundingBox();
 }
@@ -242,12 +252,14 @@ export function initTerrain(scene) {
       index.push(a, c, b, b, c, d);
     }
   }
-  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, map: tex('ground') });
   for (let cz = 0; cz < NCH; cz++) {
     for (let cx = 0; cx < NCH; cx++) {
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * n * 3), 3));
       geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * n * 3), 3));
+      geo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(n * n * 3), 3));
+      geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(n * n * 2), 2));
       geo.setIndex(index);
       const mesh = new THREE.Mesh(geo, mat);
       mesh.receiveShadow = true;
