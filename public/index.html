@@ -110,6 +110,7 @@
   #help .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 26px; }
   #help h4 { margin: 10px 0 3px; color: var(--y); }
   kbd { background: #0e1217; border: 1px solid #556; border-bottom-width: 3px; border-radius: 5px; padding: 0 6px; font-family: inherit; font-size: 12px; }
+  #bigmap { position: fixed; inset: 0; z-index: 38; cursor: grab; }
   #clickhint { position: fixed; z-index: 20; left: 50%; top: 42%; transform: translate(-50%,-50%); background: var(--p); border: 2px solid var(--y); padding: 14px 24px; border-radius: 12px; font-size: 18px; text-align: center; pointer-events: none; }
 </style>
 </head>
@@ -143,6 +144,7 @@
 </div>
 
 <div id="clickhint" class="hidden">🖱️ Klicken zum Spielen<br><small>F1 = Hilfe · ESC = Maus freigeben</small></div>
+<canvas id="bigmap" class="hidden"></canvas>
 <div id="menu" class="hidden"></div>
 <div id="score" class="hidden"></div>
 <div id="death" class="hidden"><h2>HIN IST HIN</h2><p id="deathtext"></p><p id="deathtimer"></p></div>
@@ -160,7 +162,8 @@
       <kbd>R</kbd> nachladen · Bauteil drehen<br>
       <kbd>E</kbd> einsteigen / Laden öffnen<br>
       <kbd>I</kbd> Inventar · <kbd>Tab</kbd> Rangliste · <kbd>Enter</kbd> Chat<br>
-      <kbd>B</kbd> Bier trinken (auch am Steuer…) · <kbd>M</kbd> Radio an/aus · <kbd>,</kbd><kbd>.</kbd> Radio-Lautstärke
+      <kbd>M</kbd> große Karte (Klick = Wegpunkt)<br>
+      <kbd>B</kbd> Bier trinken (auch am Steuer…) · <kbd>P</kbd> Radio an/aus · <kbd>,</kbd><kbd>.</kbd> Radio-Lautstärke
       <h4>Bagger</h4>
       <kbd>W</kbd><kbd>S</kbd> fahren · <kbd>A</kbd><kbd>D</kbd> lenken<br>
       Maus: Oberwagen drehen / Arm aus- und einfahren<br>
@@ -177,7 +180,7 @@
       <kbd>E</kbd> aussteigen – in der Luft = Schleudersitz!
       <h4>Ziel des Spiels</h4>
       Möglichst wenig tun. WIBA-Punkte gibt’s fürs Banane-Wichsen (auf Hochglanz polieren, eh klar) und fürs Im-Bagger-Sitzen.
-      Nebenbei: von Vöcklabruck an den Attersee fahren, auf den Gahberg, ins Weißenbachtal – Erz graben, Waffen schmieden, Bunker bauen, andere ärgern.
+      Die Welt ist die echte Region im Maßstab 1:1 – von Vöcklabruck an den Attersee, auf den Gahberg, ins Weißenbachtal. Erz graben, Waffen schmieden, Bunker bauen, andere ärgern.
       <h4>Sonstiges</h4>
       <kbd>F1</kbd> Hilfe · <kbd>F11</kbd> Vollbild · <kbd>ESC</kbd> Maus freigeben
     </div>

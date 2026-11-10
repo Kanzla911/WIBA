@@ -1,12 +1,11 @@
 // WIBA - Hauptspiel: Eingabe, Spieler, Gegenstaende, Effekte, Netzwerk, Schleife
 import * as THREE from 'three';
 import { G, net, clamp, invAdd, invCount } from './state.js';
-import { ITEMS, WEAPONS, PROJ, SPAWNS, PLAYER_COLORS, DAY_LENGTH, HALF } from './config.js';
-import { initTerrain, getHeight, applyEdits, flushTerrain, raycastTerrain, isProtected } from './terrain.js';
-import { initWorld, updateSky, boxes, pois, textSprite, mkBox } from './world.js';
+import { ITEMS, WEAPONS, PROJ, PLAYER_COLORS, DAY_LENGTH } from './config.js';
+import { M, loadWorld, applyAirfield, initTerrain, updateTerrain, getHeight, applyEdits, flushTerrain, raycastTerrain, isProtected, waterLevelAt, inWorld, landuseAt } from './terrain.js';
+import { initWorld, updateSky, boxes, pois, textSprite, mkBox, polyAt, surfaceAt, updateObjects, updateMarkers } from './world.js';
 import { makeAvatar, makeItem } from './models.js';
 import { initAudio, sfx, engine, ambient } from './audio.js';
-import { lakeDist, TOWN, NIXENFALL } from './geo.js';
 import * as UI from './ui.js';
 import * as C from './combat.js';
 import * as V from './vehicles.js';
@@ -29,7 +28,7 @@ renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 5000);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.25, 70000);
 camera.rotation.order = 'YXZ';
 scene.add(camera);
 G.scene = scene; G.camera = camera; G.renderer = renderer; G.canvas = canvas;
@@ -38,11 +37,11 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
 });
 
-initTerrain(scene);
-initWorld(scene, lowGfx);
 C.initCombat();
-UI.initUI();
 initNpcs();
+let worldOk = false;
+loadWorld((t) => { $('status').textContent = t; }).then(() => { worldOk = true; UI.initUI(); $('status').textContent = ''; $('hostinfo').dataset.ready = '1'; })
+  .catch((e) => { $('status').textContent = 'Karte konnte nicht geladen werden: ' + e.message + ' – zuerst die Karte bauen (npm run map).'; });
 
 // ---------- Sichtmodell (Gegenstand in der Hand) ----------
 const vm = new THREE.Group();
@@ -121,6 +120,7 @@ $('btnGfx').onclick = () => {
 let connecting = false;
 async function start(url) {
   if (connecting || G.started) return;
+  if (!worldOk) { status('Die Karte lädt noch – einen Moment…'); return; }
   connecting = true;
   initAudio();
   status('Verbinde…');
@@ -213,15 +213,30 @@ function updatePlayers(dt) {
 }
 
 // ---------- Netzwerk ----------
+// Spawn am Stadtplatz: erst wenn die Umgebung geladen ist, einen freien Platz suchen
 function spawnMe() {
-  const s = SPAWNS[Math.floor(Math.random() * SPAWNS.length)];
-  me.pos.set(s[0] + (Math.random() - 0.5) * 3, 0, s[1] + (Math.random() - 0.5) * 3);
-  me.pos.y = getHeight(me.pos.x, me.pos.z);
+  me.pos.set((Math.random() - 0.5) * 20, 0, (Math.random() - 0.5) * 20);
+  me.pos.y = getHeight(me.pos.x, me.pos.z) + 1;
   me.vel.set(0, 0, 0); me.yaw = 0; me.pitch = 0; me.chute = false;
+  G.spawnPending = 0.01;
+  UI.setBlack(true, 'Lade Umgebung…');
+}
+function finishSpawn() {
+  for (let t = 0; t < 200; t++) {
+    const a = Math.random() * 6.283, d = Math.sqrt(t) * 5;
+    const x = Math.cos(a) * d + (t ? 0 : me.pos.x), z = Math.sin(a) * d + (t ? 0 : me.pos.z);
+    if (!polyAt(x, z, 1.2) && waterLevelAt(x, z) < -1e8) { me.pos.set(x, getHeight(x, z), z); break; }
+  }
+  me.vel.set(0, 0, 0);
+  G.spawnPending = 0;
+  UI.setBlack(false);
 }
 net.on('welcome', (m) => {
   me.id = m.id;
   G.serverTimeOffset = m.time - performance.now() / 1000;
+  applyAirfield(m.air || null);
+  initTerrain(scene, lowGfx);
+  initWorld(scene, lowGfx);
   applyEdits(m.digs);
   for (const s of m.structs) C.addStruct(s);
   for (const v of m.vehicles) V.addVehicle(v);
@@ -233,7 +248,7 @@ net.on('welcome', (m) => {
   G.started = true;
   saveGame();
   UI.toast('Servus in Vöcklabruck! F1 zeigt die Steuerung.', 'good');
-  UI.addChat('', 'Tipp: [B] Bier trinken · [M] Radio · Bagger: Baustelle östlich von Vöcklabruck · Zum Attersee: Straße nach Süden.');
+  UI.addChat('', 'Tipp: [M] große Karte · [B] Bier · [P] Radio · Die Welt ist 1:1 – nimm ein Auto. Der Attersee liegt ca. 9 km südwestlich.');
 });
 net.on('join', (m) => { addPlayer(m.p); UI.addFeed(`➕ ${m.p.name} ist jetzt dabei`); });
 net.on('leave', (m) => { UI.addFeed(`➖ ${nameOf(m.id)} ist weg`); removePlayer(m.id); });
@@ -364,9 +379,10 @@ document.addEventListener('keydown', (e) => {
   const code = e.code;
   if (code === 'F1') { $('help').classList.toggle('hidden'); e.preventDefault(); return; }
   if (code === 'Tab') { e.preventDefault(); UI.showScore(true); return; }
-  if (code === 'Escape') { if (G.menu) UI.closeMenu(); $('help').classList.add('hidden'); return; }
+  if (code === 'Escape') { if (G.menu === 'map') UI.toggleMap(); else if (G.menu) UI.closeMenu(); $('help').classList.add('hidden'); return; }
   if (code === 'Enter') { e.preventDefault(); if (!G.menu) openChat(); return; }
   if (G.menu) {
+    if (G.menu === 'map') { if (code === 'KeyM' || code === 'KeyE') { UI.toggleMap(); relock(); } return; }
     if (code === 'KeyE' || code === 'KeyI') { UI.closeMenu(); relock(); }
     return;
   }
@@ -386,10 +402,13 @@ function blockedAt(x, z, y) {
   for (const b of boxes) {
     if (x > b.x0 - R && x < b.x1 + R && z > b.z0 - R && z < b.z1 + R && y + STEP < b.y1 && y + HGT > b.y0) return true;
   }
-  return false;
+  const pp = polyAt(x, z, R);
+  return !!(pp && y + STEP < pp.top && y + HGT > pp.base);
 }
 function groundAt(x, z, y) {
-  let g = getHeight(x, z);
+  let g = surfaceAt(x, z, y);
+  const pp = polyAt(x, z, R * 0.5);
+  if (pp && pp.top <= y + STEP + 0.01 && pp.top > g) g = pp.top;
   for (const b of boxes) {
     if (x > b.x0 - R && x < b.x1 + R && z > b.z0 - R && z < b.z1 + R && b.y1 <= y + STEP + 0.01 && b.y1 > g) g = b.y1;
   }
@@ -443,14 +462,14 @@ function updatePlayer(dt, ctl) {
   let nx = x + me.vel.x * dt;
   if (nx !== x) {
     const h1 = getHeight(nx, z);
-    if ((!stuck && blockedAt(nx, z, y)) || (h1 > y + 0.04 && (h1 - h0) > Math.abs(nx - x) * 1.6) || Math.abs(nx) > HALF - 6) { me.vel.x = 0; nx = x; }
+    if ((!stuck && blockedAt(nx, z, y)) || (h1 > y + 0.04 && (h1 - h0) > Math.abs(nx - x) * 1.6) || !inWorld(nx, z, 15)) { me.vel.x = 0; nx = x; }
   }
   x = nx;
   const h0b = getHeight(x, z);
   let nz = z + me.vel.z * dt;
   if (nz !== z) {
     const h1 = getHeight(x, nz);
-    if ((!stuck && blockedAt(x, nz, y)) || (h1 > y + 0.04 && (h1 - h0b) > Math.abs(nz - z) * 1.6) || Math.abs(nz) > HALF - 6) { me.vel.z = 0; nz = z; }
+    if ((!stuck && blockedAt(x, nz, y)) || (h1 > y + 0.04 && (h1 - h0b) > Math.abs(nz - z) * 1.6) || !inWorld(x, nz, 15)) { me.vel.z = 0; nz = z; }
   }
   z = nz;
   // Vertikal
@@ -467,7 +486,8 @@ function updatePlayer(dt, ctl) {
   const c = ceilingAt(x, z, y);
   if (ny + HGT > c) { ny = c - HGT; if (me.vel.y > 0) me.vel.y = 0; }
   me.inWater = false;
-  if (getHeight(x, z) < -1.3 && ny < -1.3) { ny = -1.3; me.vel.y = 0; me.inWater = true; me.onGround = true; me.chute = false; }
+  const wlv = waterLevelAt(x, z);
+  if (wlv > -1e8 && ny < wlv - 1.3) { ny = wlv - 1.3; me.vel.y = 0; me.inWater = true; me.onGround = true; me.chute = false; }
   me.pos.set(x, ny, z);
 
   if (me.onGround && wl > 0 && !me.inWater) {
@@ -649,7 +669,7 @@ function updateEffects(dt) {
       for (let i = 0; i < 12; i++) {
         const a = Math.random() * 6.28, d = 20 + Math.random() * 50;
         const x = me.pos.x + Math.cos(a) * d, z = me.pos.z + Math.sin(a) * d;
-        if (getHeight(x, z) > 0.5 && !me.vehicle) { me.pos.set(x, getHeight(x, z), z); break; }
+        if (waterLevelAt(x, z) < -1e8 && !polyAt(x, z, 1.5) && !me.vehicle) { me.pos.set(x, getHeight(x, z), z); break; }
       }
       me.drunk = 3.5; me.yaw = Math.random() * 6.28;
       hurtSelf(10, 'Alkohol');
@@ -717,7 +737,7 @@ function frame(now) {
   last = now;
   if (!G.started) return;
   G.time += dt;
-  const ctl = !G.menu && !G.chat && !me.dead && me.fx.blackout <= 2;
+  const ctl = !G.menu && !G.chat && !me.dead && me.fx.blackout <= 2 && !G.spawnPending;
 
   if (me.dead) {
     me.deadT -= dt;
@@ -726,7 +746,8 @@ function frame(now) {
   }
   updateInteraction(dt, ctl);
   if (ctl && G.pressed.KeyB) { if (invCount('bier') > 0) consume('bier'); else UI.toastOnce('nobier', 'Kein Bier mehr! Ab ins Wirtshaus.', 'bad'); }
-  if (G.pressed.KeyM && !G.chat) radio.toggle();
+  if (G.pressed.KeyP && !G.chat) radio.toggle();
+  if (G.pressed.KeyM && !G.chat && !G.menu) UI.toggleMap();
   if (G.pressed.Comma) radio.setVol(radio.vol - 0.1);
   if (G.pressed.Period) radio.setVol(radio.vol + 0.1);
   if (me.vehicle) {
@@ -734,12 +755,12 @@ function frame(now) {
     vm.visible = false; UI.setWibaBar(0);
     for (const kk of Object.keys(ghosts)) ghosts[kk].visible = false;
     me.polishing = false;
-  } else if (!me.dead) {
+  } else if (!me.dead && !G.spawnPending) {
     updatePlayer(dt, ctl);
   }
   V.updateVehicles(dt);
   updatePlayers(dt);
-  updateNpcs(dt);
+
 
   // Kamera
   if (me.vehicle) {
@@ -767,6 +788,12 @@ function frame(now) {
   C.updateFx(dt);
   updateEffects(dt);
   flushTerrain();
+  const sx = me.vehicle ? me.vehicle.pos.x : me.pos.x, sz = me.vehicle ? me.vehicle.pos.z : me.pos.z;
+  const pend = updateObjects(sx, sz, G.spawnPending ? 40 : 6);
+  const tpend = updateTerrain(sx, sz, G.spawnPending ? 40 : 5);
+  if (G.spawnPending) { G.spawnPending += dt; if ((!pend && !tpend) || G.spawnPending > 25) finishSpawn(); }
+  updateMarkers(sx, sz, dt);
+  updateNpcs(dt, !pend);
   const st = G.serverTimeOffset + now / 1000;
   G.dayT = ((st / DAY_LENGTH) + 0.36) % 1;
   G.daylight = updateSky(G.dayT, dt, me.pos, scene);
@@ -775,13 +802,14 @@ function frame(now) {
   if (ambT <= 0) {
     ambT = 0.3;
     const p = camera.position;
-    const inTown = Math.abs(me.pos.x - TOWN.x) < 150 && Math.abs(me.pos.z - TOWN.z) < 105;
-    const ld = Math.abs(lakeDist(p.x, p.z));
-    const fall = Math.hypot(p.x - NIXENFALL.x, p.z - NIXENFALL.z + 30);
-    const wat = Math.max(p.y < 30 ? Math.max(0, 1 - ld / 45) * 0.05 : 0, Math.max(0, 1 - fall / 60) * 0.12);
+    const inTown = landuseAt(me.pos.x, me.pos.z) === 3;
+    let wn = 0;
+    for (const [ox, oz] of [[0, 0], [25, 0], [-25, 0], [0, 25], [0, -25]]) if (waterLevelAt(p.x + ox, p.z + oz) > p.y - 25) wn++;
+    const agl = p.y - getHeight(p.x, p.z);
+    const wat = wn ? 0.02 + wn * 0.008 : 0;
     const air = me.vehicle && V.isAir(me.vehicle);
-    ambient(inTown && !air ? 0.03 + 0.04 * G.daylight : 0, wat, Math.min(0.09, Math.max(0, (p.y - 35) / 900) + (air ? 0.05 : 0.004)));
-    if (!inTown && !air && G.daylight > 0.3 && p.y < 90 && Math.random() < 0.09) sfx.bird();
+    ambient(inTown && !air ? 0.03 + 0.04 * G.daylight : 0, wat, Math.min(0.09, Math.max(0, agl - 20) / 900 + Math.max(0, p.y + M.meta.yoff - 900) / 9000 + (air ? 0.05 : 0.004)));
+    if (!inTown && !air && G.daylight > 0.3 && agl < 60 && Math.random() < 0.09) sfx.bird();
     if (inTown && Math.random() < 0.004) sfx.bell();
   }
 
@@ -808,6 +836,6 @@ window.WIBA = { G, net, C, V, UI, getHeight };
 radio.onChange = () => {
   const el = $('radio');
   const st = radio.status;
-  el.textContent = `📻 Radio Salzburg – ${st}${st === 'Verbindung fehlgeschlagen' ? ' · [M] neu verbinden' : (st === 'spielt' || st === 'lädt' ? ' · [M] Pause' : ' · [M] Start')} · [,][.] Lautstärke ${Math.round(radio.vol * 100)}%`;
+  el.textContent = `📻 Radio Salzburg – ${st}${st === 'Verbindung fehlgeschlagen' ? ' · [P] neu verbinden' : (st === 'spielt' || st === 'lädt' ? ' · [P] Pause' : ' · [P] Start')} · [,][.] Lautstärke ${Math.round(radio.vol * 100)}%`;
 };
 radio.onChange();

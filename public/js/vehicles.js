@@ -2,8 +2,11 @@
 import * as THREE from 'three';
 import { G, net, clamp } from './state.js';
 import { VEH } from './config.js';
-import { getHeight, zoneName } from './terrain.js';
-import { boxes, pointInBoxes } from './world.js';
+import { zoneName, waterLevelAt, inWorld, M } from './terrain.js';
+import { boxes, pointInBoxes, polyAt, surfaceAt } from './world.js';
+
+let refY = 0;
+const getHeight = (x, z) => surfaceAt(x, z, refY);
 import { makeBagger, makeAuto, makeFlieger, makeJet, poseBaggerArm } from './models.js';
 import { sfx, engine } from './audio.js';
 import { toast, toastOnce, setVehHud, setAim } from './ui.js';
@@ -156,10 +159,12 @@ function boxBlocks(x, z, y) {
   for (const b of boxes) {
     if (x > b.x0 - 1.2 && x < b.x1 + 1.2 && z > b.z0 - 1.2 && z < b.z1 + 1.2 && b.y1 > y + 0.7 && b.y0 < y + 2.4) return true;
   }
-  return false;
+  const pp = polyAt(x, z, 1.1);
+  return !!(pp && pp.top > y + 0.7);
 }
 
 function orientGround(v, dt, snap) {
+  refY = v.pos.y;
   const sx = Math.sin(v.yaw), cz = Math.cos(v.yaw), lx = Math.cos(v.yaw), lz = -Math.sin(v.yaw);
   const L = v.type === 'bagger' ? 2.2 : 1.6, W = 1.2;
   const x = v.pos.x, z = v.pos.z;
@@ -172,6 +177,7 @@ function orientGround(v, dt, snap) {
 }
 
 function simGround(v, dt) {
+  refY = v.pos.y;
   const k = G.keys, m = G.mouse, isB = v.type === 'bagger';
   const fwdIn = (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0), rawTurn = (k.KeyA ? 1 : 0) - (k.KeyD ? 1 : 0);
   // Alkohol: verzoegerte Lenkung + Schlangenlinien
@@ -198,7 +204,7 @@ function simGround(v, dt) {
     const probe = 2.5;
     const h0 = getHeight(v.pos.x, v.pos.z), h1 = getHeight(nx + sx * probe * dir, nz + cz * probe * dir);
     const maxSlope = isB ? 1.3 : 1.1;
-    if ((h1 - h0) / probe > maxSlope || h1 < -1.2 || boxBlocks(nx + sx * probe * dir * 0.8, nz + cz * probe * dir * 0.8, v.pos.y)) {
+    if ((h1 - h0) / probe > maxSlope || waterLevelAt(nx + sx * probe * dir, nz + cz * probe * dir) - h1 > 1.1 || !inWorld(nx, nz, 30) || boxBlocks(nx + sx * probe * dir * 0.8, nz + cz * probe * dir * 0.8, v.pos.y)) {
       if (Math.abs(v.speed) > 12) { net.send({ t: 'vdmg', id: v.id, d: Math.abs(v.speed) * 2 }); sfx.dig(); }
       v.speed = 0;
     } else { v.pos.x = nx; v.pos.z = nz; }
@@ -247,6 +253,7 @@ function simGround(v, dt) {
 }
 
 function simAir(v, dt) {
+  refY = v.pos.y + 1;
   const sp = v.spec, k = G.keys, m = G.mouse;
   v.throttle = clamp(v.throttle + ((k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0)) * 0.6 * dt, 0, 1);
   v.stickX = clamp(v.stickX + m.dx * 0.004, -1, 1); v.stickY = clamp(v.stickY + m.dy * 0.004, -1, 1);
@@ -285,13 +292,14 @@ function simAir(v, dt) {
   const vy = _f.y * v.speed - sink;
   v.pos.x += _f.x * v.speed * dt; v.pos.z += _f.z * v.speed * dt; v.pos.y += vy * dt;
   v.vy = vy;
-  if (Math.abs(v.pos.x) > 2600) v.pos.x = -Math.sign(v.pos.x) * 2590;
-  if (Math.abs(v.pos.z) > 2600) v.pos.z = -Math.sign(v.pos.z) * 2590;
-  if (v.pos.y > 1100) v.pos.y = 1100;
+  if (v.pos.x < M.minX - 4000) v.pos.x = M.maxX + 3900; else if (v.pos.x > M.maxX + 4000) v.pos.x = M.minX - 3900;
+  if (v.pos.z < M.minZ - 4000) v.pos.z = M.maxZ + 3900; else if (v.pos.z > M.maxZ + 4000) v.pos.z = M.minZ - 3900;
+  if (v.pos.y > 4500) v.pos.y = 4500;
   const g = getHeight(v.pos.x, v.pos.z);
-  const surf = Math.max(g, 0);
+  const wl = waterLevelAt(v.pos.x, v.pos.z);
+  const surf = Math.max(g, wl);
   if (v.pos.y <= surf + 0.02) {
-    if (g < -0.3) { crash(v, 'Platsch! Flieger versenkt.'); return; }
+    if (wl > g + 0.3) { crash(v, 'Platsch! Flieger versenkt.'); return; }
     if (!v.onGround && (vy < -10 || Math.abs(_l.y) > 0.5 || _f.y < -0.4)) { crash(v, 'Bruchlandung!'); return; }
     const fl = Math.hypot(_f.x, _f.z) || 1;
     const ahead = getHeight(v.pos.x + (_f.x / fl) * 4, v.pos.z + (_f.z / fl) * 4);
@@ -377,11 +385,11 @@ export function updateVehicles(dt) {
       v.heading = headingOf(v.quat);
       if (v.type === 'bagger') v.digT = Math.max(0, v.digT - dt * 2.3);
     } else if (!isAir(v)) {
-      v.yaw = v.heading;
+      v.yaw = v.heading; refY = v.pos.y + 3;
       const g = getHeight(v.pos.x, v.pos.z);
-      if (Math.abs(g - v.pos.y) > 0.01) { v.pos.y += (g - v.pos.y) * Math.min(1, 8 * dt); }
+      if (Math.abs(g - v.pos.y) > 4) v.pos.y = g; else if (Math.abs(g - v.pos.y) > 0.01) { v.pos.y += (g - v.pos.y) * Math.min(1, 8 * dt); }
       orientGround(v, dt, false);
-    }
+    } else { refY = 1e9; v.pos.y = getHeight(v.pos.x, v.pos.z); }
     v.group.position.copy(v.pos); v.group.quaternion.copy(v.quat);
     if (v.type === 'bagger') {
       v.parts.upper.rotation.y = v.cab;

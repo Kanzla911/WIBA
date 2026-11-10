@@ -85,5 +85,32 @@ const pois = [
   assert.ok(tt.some((t) => t.w), 'Fluss');
   assert.ok(unproj(0, 0)[0] === CFG.lat0);
   fs.rmSync(out, { recursive: true, force: true });
+
+  // Zweiter Weg: GeoJSON-Zeilen wie von "osmium export -f geojsonseq"
+  const { loadGeojson } = require('../tools/build-map');
+  const C = (g) => [g.lon, g.lat];
+  const feats = [
+    { type: 'Feature', properties: { building: 'house', 'building:levels': '2', 'roof:shape': 'gabled', amenity: 'pub', name: 'Zum Test' }, geometry: { type: 'Polygon', coordinates: [box(48.0069, 13.6558, 0.0001, 0.00015).map(C)] } },
+    { type: 'Feature', properties: { building: 'house' }, geometry: { type: 'LineString', coordinates: box(48.0069, 13.6558, 0.0001, 0.00015).map(C) } },
+    { type: 'Feature', properties: { highway: 'primary' }, geometry: { type: 'LineString', coordinates: [G(48.0, 13.60), G(48.0069, 13.6558), G(48.01, 13.70)].map(C) } },
+    { type: 'Feature', properties: { waterway: 'river' }, geometry: { type: 'LineString', coordinates: [G(48.0, 13.5), G(48.0, 13.62)].map(C) } },
+    { type: 'Feature', properties: { natural: 'water' }, geometry: { type: 'MultiPolygon', coordinates: [[box(47.9, 13.52, 0.07, 0.06).map(C)]] } },
+    { type: 'Feature', properties: { natural: 'wood' }, geometry: { type: 'Polygon', coordinates: [box(47.95, 13.60, 0.01, 0.02).map(C)] } },
+    { type: 'Feature', properties: { place: 'town', name: 'Testdorf' }, geometry: { type: 'Point', coordinates: [13.6, 48.0] } },
+    { type: 'Feature', properties: { natural: 'tree' }, geometry: { type: 'Point', coordinates: [13.65, 48.0] } },
+  ];
+  const gjFile = path.join(os.tmpdir(), 'wiba-test.geojsonseq');
+  fs.writeFileSync(gjFile, feats.map((f) => '\x1e' + JSON.stringify(f)).join('\n') + '\n');
+  const geo = await loadGeojson(gjFile);
+  assert.strictEqual(geo.pois.length, 2, 'POIs aus GeoJSON: ' + geo.pois.length);
+  const out2 = fs.mkdtempSync(path.join(os.tmpdir(), 'wiba-map2-'));
+  const meta2 = await buildMap({ outDir: out2, noSleep: true, geo, osm: async () => { throw new Error('darf nicht abgefragt werden'); },
+    dem: async () => (lat, lon) => (lat < 47.97 && lat > 47.9 && lon > 13.52 && lon < 13.58 ? 469 : 500 + (lon - 13.44) * 1500) });
+  assert.strictEqual(meta2.counts.buildings, 1, 'Gebaeude (nur Flaeche, nicht die Linie)');
+  assert.ok(meta2.counts.roads >= 1 && meta2.counts.water >= 1 && meta2.counts.trees === 1 && meta2.counts.pois === 2);
+  assert.strictEqual(meta2.lakes.length, 1, 'See aus MultiPolygon');
+  const lu2 = fs.readFileSync(path.join(out2, 'landuse.bin'));
+  assert.strictEqual(lu2[at(47.955, 13.61)], 1, 'Wald aus Polygon');
+  fs.rmSync(out2, { recursive: true, force: true }); fs.rmSync(gjFile);
   console.log('Kartenbau-Test: alles in Ordnung');
 })().catch((e) => { console.error('Kartenbau-Test FEHLGESCHLAGEN:', e); process.exit(1); });

@@ -1,19 +1,19 @@
 // WIBA - HUD, Menues, Chat, Rangliste, Minimap
 import { G, net, invCount, invAdd } from './state.js';
-import { ITEMS, HOTBAR_ORDER, SHOPS, RECIPES, HALF, VEH, WEAPONS } from './config.js';
-import { minimapImage, zoneName } from './terrain.js';
+import { ITEMS, HOTBAR_ORDER, SHOPS, RECIPES, VEH, WEAPONS } from './config.js';
+import { M, zoneName } from './terrain.js';
 import { pois } from './world.js';
 import { sfx } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
-let mapImg = null, mapCtx = null;
+let mapCtx = null;
 let hotbarKey = '';
 
 export function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 export function initUI() {
-  mapImg = minimapImage(190);
   mapCtx = $('minimap').getContext('2d');
+  initBigMap();
 }
 
 export function toast(msg, kind = '') {
@@ -112,7 +112,8 @@ export function updateHUD(dt) {
   $('effects').textContent = fx.join(' · ');
   const hrs = (G.dayT * 24);
   const hh = Math.floor(hrs), mm = Math.floor((hrs - hh) * 60);
-  $('loc').textContent = `📍 ${zoneName(me.pos.x, me.pos.z)} · ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')} Uhr`;
+  const wpt = G.waypoint ? ` · 📌 ${(Math.hypot(G.waypoint.x - me.pos.x, G.waypoint.z - me.pos.z) / 1000).toFixed(1)} km` : '';
+  $('loc').textContent = `📍 ${zoneName(me.pos.x, me.pos.z)} · ${Math.round(me.pos.y + M.meta.yoff)} m · ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')} Uhr${wpt}`;
   drawMinimap();
   if (!$('score').classList.contains('hidden')) renderScore();
 }
@@ -139,33 +140,135 @@ export function setAim(x, y) {
 }
 export function setCrosshair(on) { $('crosshair').style.display = on ? '' : 'none'; }
 
-function drawMinimap() {
-  const ctx = mapCtx, S = 190;
-  ctx.drawImage(mapImg, 0, 0);
-  const tx = (x) => ((x + HALF) / (2 * HALF)) * S;
-  ctx.font = '11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  for (const p of pois) { ctx.fillStyle = '#ffe14a'; ctx.fillRect(tx(p.x) - 1.5, tx(p.z) - 1.5, 3, 3); }
-  for (const v of G.vehicles.values()) {
-    if (v.dead) continue;
-    ctx.fillStyle = v.type === 'bagger' ? '#f2b90f' : (v.type === 'auto' ? '#e0553f' : '#ffffff');
-    const x = tx(v.pos.x), y = tx(v.pos.z);
-    if (v.type === 'jet' || v.type === 'flieger') { ctx.beginPath(); ctx.moveTo(x, y - 4); ctx.lineTo(x + 3.5, y + 3); ctx.lineTo(x - 3.5, y + 3); ctx.fill(); }
-    else ctx.fillRect(x - 2.5, y - 2.5, 5, 5);
+// ---------- Karten ----------
+const ICON = { wirt: '🍺', werk: '🔧', handel: '💰', tank: '⛽', dealer: '🌿', kirche: '⛪', bahnhof: '🚉', flug: '✈️', sternwarte: '🔭', burg: '🏰', fall: '💧', attr: '★' };
+const VICON = { bagger: '🚜', auto: '🛻', flieger: '🛩️', jet: '✈️' };
+// Zeichnet die Karte: Mittelpunkt (cx,cz) in Weltmetern, s = Pixel pro Meter
+function drawMap(ctx, W, H, cx, cz, s, big) {
+  const ov = M.overview, m = M.meta;
+  ctx.fillStyle = '#16222e'; ctx.fillRect(0, 0, W, H);
+  const X = (x) => (x - cx) * s + W / 2, Y = (z) => (z - cz) * s + H / 2;
+  if (ov) {
+    ctx.imageSmoothingEnabled = s < 0.12;
+    const pm = 20; // Meter pro Uebersichtspixel
+    ctx.drawImage(ov, X(m.minX - pm / 2), Y(m.minZ - pm / 2), ov.width * pm * s, ov.height * pm * s);
   }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const vis = (x, z, pad = 20) => { const a = X(x), b = Y(z); return a > -pad && b > -pad && a < W + pad && b < H + pad; };
+  const text = (t, x, y, size, col = '#fff', bold = true) => { ctx.font = `${bold ? 'bold ' : ''}${size}px "Trebuchet MS", Arial, sans-serif`; ctx.lineWidth = Math.max(2, size / 5); ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.strokeText(t, x, y); ctx.fillStyle = col; ctx.fillText(t, x, y); };
+  // Sehenswuerdigkeiten, Laeden, Gipfel
+  for (const p of M.pois) {
+    if (p.k === 'place' || !vis(p.x, p.z)) continue;
+    const x = X(p.x), y = Y(p.z);
+    if (p.k === 'peak') { if (s > 0.035 || (p.e || 0) > 1400) text('▲' + (s > 0.06 && p.n ? ' ' + p.n : ''), x, y, big ? 11 : 9, '#e8e2d0', false); continue; }
+    const lim = p.k === 'wirt' || p.k === 'werk' || p.k === 'handel' || p.k === 'tank' ? 0.1 : (p.k === 'kirche' ? 0.22 : 0.06);
+    if (s < lim) continue;
+    ctx.font = (big ? 15 : 12) + 'px sans-serif'; ctx.fillText(ICON[p.k] || '•', x, y);
+    if (big && s > 0.5 && p.n) text(p.n, x, y + 14, 10, '#ffe9a8', false);
+  }
+  if (s >= 0.1) for (const p of pois) if (p.kind === 'dealer' && vis(p.x, p.z)) { ctx.font = (big ? 15 : 12) + 'px sans-serif'; ctx.fillText(ICON.dealer, X(p.x), Y(p.z)); }
+  // Ortsnamen
+  for (const p of M.pois) {
+    if (p.k !== 'place' || !vis(p.x, p.z, 80)) continue;
+    const need = [0, 0, 0.02, 0.07, 0.07, 0.3][p.r];
+    if (s < need) continue;
+    text(p.n, X(p.x), Y(p.z), (big ? [20, 17, 13, 11, 11, 10] : [13, 12, 10, 9, 9, 8])[p.r], p.r <= 1 ? '#fff' : '#f3ead2', p.r <= 2);
+  }
+  if (M.air && vis((M.air.x0 + M.air.x1) / 2, (M.air.z0 + M.air.z1) / 2)) { ctx.font = (big ? 18 : 13) + 'px sans-serif'; ctx.fillText('✈️', X((M.air.x0 + M.air.x1) / 2), Y((M.air.z0 + M.air.z1) / 2)); }
+  // Fahrzeuge
+  for (const v of G.vehicles.values()) {
+    if (v.dead || v === G.me.vehicle || !vis(v.pos.x, v.pos.z)) continue;
+    ctx.font = (big ? 16 : 12) + 'px sans-serif'; ctx.fillText(VICON[v.type], X(v.pos.x), Y(v.pos.z));
+  }
+  // Wegpunkt
+  const wp = G.waypoint;
+  if (wp) {
+    let x = X(wp.x), y = Y(wp.z);
+    if (!big) { const dx = x - W / 2, dy = y - H / 2, d = Math.hypot(dx, dy), lim = W / 2 - 9; if (d > lim) { x = W / 2 + (dx / d) * lim; y = H / 2 + (dy / d) * lim; } }
+    ctx.fillStyle = '#ff3df0'; ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, big ? 8 : 5, 0, 6.3); ctx.fill(); ctx.stroke();
+    if (big) { ctx.strokeStyle = 'rgba(255,61,240,0.75)'; ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.moveTo(X(G.me.pos.x), Y(G.me.pos.z)); ctx.lineTo(x, y); ctx.stroke(); ctx.setLineDash([]); }
+  }
+  // Mitspieler
   for (const p of G.players.values()) {
     if (p.dead) continue;
-    ctx.fillStyle = '#ff4433'; ctx.beginPath(); ctx.arc(tx(p.pos.x), tx(p.pos.z), 3.2, 0, 6.3); ctx.fill();
-    ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke();
+    let x = X(p.pos.x), y = Y(p.pos.z);
+    if (!big) { const dx = x - W / 2, dy = y - H / 2, d = Math.hypot(dx, dy), lim = W / 2 - 7; if (d > lim) { x = W / 2 + (dx / d) * lim; y = H / 2 + (dy / d) * lim; } }
+    ctx.fillStyle = '#' + (p.color || 0xff4433).toString(16).padStart(6, '0'); ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, big ? 7 : 4.5, 0, 6.3); ctx.fill(); ctx.stroke();
+    if (big) text(p.name, x, y - 15, 13, '#fff');
   }
+  // Ich
   const me = G.me;
-  let yaw = me.yaw;
-  if (me.vehicle) yaw = me.vehicle.heading + Math.PI;
   ctx.save();
-  ctx.translate(Math.max(4, Math.min(S - 4, tx(me.pos.x))), Math.max(4, Math.min(S - 4, tx(me.pos.z))));
-  ctx.rotate(-yaw);
-  ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(5, 5); ctx.lineTo(0, 2); ctx.lineTo(-5, 5); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.translate(X(me.pos.x), Y(me.pos.z));
+  ctx.rotate(-(me.vehicle ? me.vehicle.heading + Math.PI : me.yaw));
+  ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
+  const k = big ? 1.5 : 1;
+  ctx.beginPath(); ctx.moveTo(0, -8 * k); ctx.lineTo(6 * k, 6 * k); ctx.lineTo(0, 2.5 * k); ctx.lineTo(-6 * k, 6 * k); ctx.closePath(); ctx.fill(); ctx.stroke();
   ctx.restore();
+  if (big) text(me.name, X(me.pos.x), Y(me.pos.z) - 18, 13, '#ffd21f');
+}
+function drawMinimap() {
+  if (!M.ready) return;
+  const z = G.me.vehicle && Math.abs(G.me.vehicle.speed || 0) > 30 ? 0.05 : 0.14;
+  drawMap(mapCtx, 190, 190, G.me.pos.x, G.me.pos.z, z, false);
+  if (bigOpen) drawBig();
+}
+// Grosse Karte (Taste M): ziehen = verschieben, Mausrad = zoomen, Klick = Wegpunkt
+let bigOpen = false, bigCv = null, bigCtx = null, bcx = 0, bcz = 0, bs = 0.04, drag = null;
+function initBigMap() {
+  bigCv = $('bigmap'); bigCtx = bigCv.getContext('2d');
+  bigCv.addEventListener('mousedown', (e) => { drag = { x: e.clientX, y: e.clientY, cx: bcx, cz: bcz, moved: false, btn: e.button }; });
+  window.addEventListener('mousemove', (e) => {
+    if (!drag || !bigOpen) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 5) drag.moved = true;
+    if (drag.moved) { bcx = drag.cx - dx / bs; bcz = drag.cz - dy / bs; drawBig(); }
+  });
+  window.addEventListener('mouseup', (e) => {
+    if (!drag || !bigOpen) { drag = null; return; }
+    if (!drag.moved) {
+      if (drag.btn === 2) G.waypoint = null;
+      else { G.waypoint = { x: bcx + (e.clientX - bigCv.width / 2) / bs, z: bcz + (e.clientY - bigCv.height / 2) / bs }; sfx.buy(); }
+      drawBig();
+    }
+    drag = null;
+  });
+  bigCv.addEventListener('wheel', (e) => {
+    const f = e.deltaY < 0 ? 1.25 : 0.8, ns = Math.max(0.012, Math.min(1.6, bs * f));
+    const wx = bcx + (e.clientX - bigCv.width / 2) / bs, wz = bcz + (e.clientY - bigCv.height / 2) / bs;
+    bs = ns; bcx = wx - (e.clientX - bigCv.width / 2) / bs; bcz = wz - (e.clientY - bigCv.height / 2) / bs;
+    drawBig(); e.preventDefault();
+  }, { passive: false });
+}
+function drawBig() {
+  const W = bigCv.width, H = bigCv.height, ctx = bigCtx;
+  drawMap(ctx, W, H, bcx, bcz, bs, true);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = 'rgba(18,21,27,0.85)'; ctx.fillRect(14, H - 118, 700, 104);
+  ctx.fillStyle = '#ffd21f'; ctx.font = 'bold 15px "Trebuchet MS", Arial'; ctx.fillText('KARTE – Vöcklabruck · Attersee · Höllengebirge', 26, H - 94);
+  ctx.fillStyle = '#fff'; ctx.font = '13px "Trebuchet MS", Arial';
+  ctx.fillText('Ziehen = verschieben · Mausrad = zoomen · Klick = Wegpunkt · Rechtsklick = löschen · M = zu', 26, H - 72);
+  ctx.fillText('🍺 Wirtshaus  🔧 Werkstatt  💰 Laden  ⛽ Tankstelle  🌿 Der Franz  ⛪ Kirche  ★ Sehenswert  ▲ Gipfel', 26, H - 50);
+  ctx.fillText('🚜 Bagger  🛻 Auto  🛩️ Flieger  ✈️ Jet / Flugplatz  ● Mitspieler  ▲ du' + (G.waypoint ? `   ·   Wegpunkt: ${(Math.hypot(G.waypoint.x - G.me.pos.x, G.waypoint.z - G.me.pos.z) / 1000).toFixed(1)} km` : ''), 26, H - 28);
+  // Massstab
+  const km = bs > 0.3 ? 0.1 : (bs > 0.06 ? 1 : 5), len = km * 1000 * bs;
+  ctx.fillStyle = 'rgba(18,21,27,0.85)'; ctx.fillRect(W - len - 44, H - 52, len + 30, 38);
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(W - len - 30, H - 26); ctx.lineTo(W - 30, H - 26); ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.fillText(km < 1 ? '100 m' : km + ' km', W - len - 30, H - 34);
+  ctx.font = '11px Arial'; ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.textAlign = 'right'; ctx.fillText(M.meta.attribution || '', W - 12, 16);
+}
+export function toggleMap() {
+  bigOpen = !bigOpen;
+  bigCv.classList.toggle('hidden', !bigOpen);
+  if (bigOpen) {
+    G.menu = 'map';
+    if (document.pointerLockElement) document.exitPointerLock();
+    bigCv.width = window.innerWidth; bigCv.height = window.innerHeight;
+    bcx = G.me.pos.x; bcz = G.me.pos.z; bs = 0.09;
+    drawBig();
+  } else G.menu = null;
 }
 
 // ---------- Rangliste ----------

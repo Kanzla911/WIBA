@@ -132,6 +132,7 @@ function assembleRings(lines) {
   return rings;
 }
 function ringsOfElement(el) {
+  if (el.rings) return el.rings;
   if (el.type === 'way' && el.geometry) {
     const g = el.geometry;
     if (g.length >= 4 && keyOf(g[0]) === keyOf(g[g.length - 1])) return [g];
@@ -200,7 +201,7 @@ function processElements(elements, ctx) {
       ctx.buildings.set(id, { t, pts: ptsOf(best).slice(0, -1) });
       continue;
     }
-    if (el.type === 'way' && el.geometry) {
+    if (el.type === 'way' && el.geometry && !el.rings) {
       if (t.highway && HWY[t.highway] !== undefined) {
         if (ctx.lines.has(id) || t.tunnel === 'yes' || t.covered === 'yes' || t.tunnel === 'building_passage') continue;
         const cls = HWY[t.highway];
@@ -226,6 +227,97 @@ function processElements(elements, ctx) {
       if (rings.length) ctx.areas.set(id, { cls: ac, rings, t });
     }
   }
+}
+
+function classifyPois(els, pois, minX, maxX, minZ, maxZ) {
+  const poiSeen = new Set();
+  for (const el of els) {
+    const id = el.type[0] + el.id;
+    if (poiSeen.has(id)) continue;
+    poiSeen.add(id);
+    const t = el.tags || {};
+    const lat = el.lat !== undefined ? el.lat : (el.center && el.center.lat), lon = el.lon !== undefined ? el.lon : (el.center && el.center.lon);
+    if (lat === undefined) continue;
+    const [x, z] = proj(lat, lon);
+    let k = null;
+    if (t.place) k = 'place';
+    else if (t.natural === 'peak') k = 'peak';
+    else if (t.natural === 'waterfall') k = 'fall';
+    else if (t.amenity === 'fuel') k = 'tank';
+    else if (['pub', 'restaurant', 'cafe', 'biergarten'].includes(t.amenity)) k = 'wirt';
+    else if (['carpenter', 'metal_construction', 'stonemason', 'joiner'].includes(t.craft) || t.shop === 'car_repair' || t.man_made === 'works') k = 'werk';
+    else if (['supermarket', 'doityourself', 'hardware', 'convenience', 'bakery', 'butcher', 'car'].includes(t.shop)) k = 'handel';
+    else if (t.amenity === 'place_of_worship') k = 'kirche';
+    else if (t.railway === 'station') k = 'bahnhof';
+    else if (t.aeroway === 'aerodrome') k = 'flug';
+    else if (t.man_made === 'observatory') k = 'sternwarte';
+    else if (t.historic === 'castle' || t.historic === 'city_gate' || t.historic === 'tower') k = 'burg';
+    else k = 'attr';
+    const p = { k, n: t.name || '', x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10 };
+    if (t.place) p.r = { city: 0, town: 1, village: 2, suburb: 3, hamlet: 4, locality: 5 }[t.place];
+    if (t.ele) p.e = num(t.ele);
+    if (t.amenity && t.amenity !== 'fuel' && k !== 'wirt' && k !== 'kirche') p.a = t.amenity;
+    if (t.tourism) p.tr = t.tourism;
+    if (t.shop) p.s = t.shop;
+    if (t.craft) p.c = t.craft;
+    if (x < minX || x > maxX || z < minZ || z > maxZ) continue;
+    pois.push(p);
+  }
+}
+
+// GeoJSON-Zeilen (osmium export -f geojsonseq) einlesen -> Elemente + POI-Kandidaten
+const POI_SETS = {
+  place: ['city', 'town', 'village', 'hamlet', 'suburb', 'locality'], natural: ['peak', 'waterfall', 'spring', 'cave_entrance'],
+  tourism: ['attraction', 'viewpoint', 'museum', 'gallery', 'hotel', 'camp_site'], historic: ['castle', 'tower', 'monument', 'archaeological_site', 'ruins', 'memorial', 'city_gate'],
+  man_made: ['tower', 'observatory', 'works', 'water_tower'], amenity: ['pub', 'restaurant', 'cafe', 'biergarten', 'fuel', 'place_of_worship', 'townhall', 'school', 'hospital', 'fire_station', 'police'],
+  shop: ['supermarket', 'doityourself', 'hardware', 'convenience', 'car_repair', 'car', 'bakery', 'butcher'], craft: ['carpenter', 'metal_construction', 'stonemason', 'joiner'],
+};
+function isPoi(t) {
+  if (t.amenity === 'fuel' || t.aeroway === 'aerodrome') return true;
+  if (t.shop && POI_SETS.shop.includes(t.shop)) return true;
+  if (t.craft && POI_SETS.craft.includes(t.craft)) return true;
+  if (!t.name) return false;
+  if (t.railway === 'station') return true;
+  for (const k of ['place', 'natural', 'tourism', 'historic', 'man_made', 'amenity']) if (t[k] && POI_SETS[k].includes(t[k])) return true;
+  return false;
+}
+async function loadGeojson(file) {
+  const readline = require('readline');
+  const rl = readline.createInterface({ input: fs.createReadStream(file, { encoding: 'utf8' }), crlfDelay: Infinity });
+  const elements = [], pois = [], seenPoi = new Set();
+  let id = 1, lines = 0;
+  const G = (c) => ({ lat: c[1], lon: c[0] });
+  for await (let line of rl) {
+    line = line.replace(/^\x1e/, '').trim();
+    if (!line || line[0] !== '{') continue;
+    let f; try { f = JSON.parse(line); } catch (e) { continue; }
+    if (!f || !f.geometry) continue;
+    lines++;
+    const t = f.properties || {}, g = f.geometry, n = id++;
+    let center = null;
+    if (g.type === 'Point') {
+      center = G(g.coordinates);
+      if (t.natural === 'tree') elements.push({ type: 'node', id: n, lat: center.lat, lon: center.lon, tags: t });
+    } else if (g.type === 'LineString') {
+      if (t.highway || t.railway || t.waterway || t.aeroway) elements.push({ type: 'way', id: n, tags: t, geometry: g.coordinates.map(G) });
+    } else if (g.type === 'Polygon' || g.type === 'MultiPolygon') {
+      const polys = g.type === 'Polygon' ? [g.coordinates] : g.coordinates;
+      const o0 = polys[0] && polys[0][0];
+      if (o0 && o0.length) { let a = 0, b = 0; for (const c of o0) { a += c[0]; b += c[1]; } center = { lat: b / o0.length, lon: a / o0.length }; }
+      if (t.building && t.building !== 'no') {
+        polys.forEach((p, i) => { if (p[0] && p[0].length >= 4) elements.push({ type: 'way', id: n + '_' + i, tags: t, rings: [p[0].map(G)] }); });
+      } else if (t.natural || t.landuse || t.leisure || t.waterway === 'riverbank') {
+        const rings = []; for (const p of polys) for (const r of p) if (r.length >= 4) rings.push(r.map(G));
+        if (rings.length) elements.push({ type: 'relation', id: n, tags: t, rings });
+      }
+    }
+    if (center && g.type !== 'LineString' && isPoi(t)) {
+      const key = (t.name || '') + '|' + (t.place || t.amenity || t.shop || t.craft || t.natural || t.tourism || t.historic || '') + '|' + center.lat.toFixed(4) + ',' + center.lon.toFixed(4);
+      if (!seenPoi.has(key)) { seenPoi.add(key); pois.push({ type: 'node', id: n, lat: center.lat, lon: center.lon, tags: t }); }
+    }
+  }
+  log(`GeoJSON: ${lines} Objekte gelesen, ${elements.length} verwendet, ${pois.length} POI-Kandidaten`);
+  return { elements, pois };
 }
 
 // ---------------- Raster ----------------
@@ -316,9 +408,10 @@ async function buildMap(o) {
   const step = o.step || 0.04;
   const cells = [];
   for (let la = CFG.south; la < CFG.north - 1e-9; la += step) for (let lo = CFG.west; lo < CFG.east - 1e-9; lo += step) cells.push([la, lo, Math.min(la + step, CFG.north), Math.min(lo + step, CFG.east)]);
-  log(`OSM: ${cells.length} Abfragen`);
+  if (o.geo) { processElements(o.geo.elements, ctx); log(`OSM (Auszug): Gebaeude ${ctx.buildings.size}, Linien ${ctx.lines.size}, Flaechen ${ctx.areas.size}, Baeume ${ctx.trees.size}`); }
+  else log(`OSM: ${cells.length} Abfragen`);
   let n = 0;
-  for (const c of cells) {
+  for (const c of o.geo ? [] : cells) {
     const json = await o.osm(mainQuery(c), o.cache ? `${o.cache}/osm_${c[0].toFixed(3)}_${c[1].toFixed(3)}.json.gz` : null);
     processElements(json.elements || [], ctx);
     n++;
@@ -328,43 +421,15 @@ async function buildMap(o) {
   const pq = [];
   const hs = (CFG.north - CFG.south) / 2, ws = (CFG.east - CFG.west) / 2;
   for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) pq.push([CFG.south + a * hs, CFG.west + b * ws, CFG.south + (a + 1) * hs, CFG.west + (b + 1) * ws]);
-  const poiSeen = new Set();
-  for (const c of pq) {
-    const json = await o.osm(poiQuery(c), o.cache ? `${o.cache}/poi_${c[0].toFixed(3)}_${c[1].toFixed(3)}.json.gz` : null);
-    for (const el of json.elements || []) {
-      const id = el.type[0] + el.id;
-      if (poiSeen.has(id)) continue;
-      poiSeen.add(id);
-      const t = el.tags || {};
-      const lat = el.lat !== undefined ? el.lat : (el.center && el.center.lat), lon = el.lon !== undefined ? el.lon : (el.center && el.center.lon);
-      if (lat === undefined) continue;
-      const [x, z] = proj(lat, lon);
-      let k = null;
-      if (t.place) k = 'place';
-      else if (t.natural === 'peak') k = 'peak';
-      else if (t.natural === 'waterfall') k = 'fall';
-      else if (t.amenity === 'fuel') k = 'tank';
-      else if (['pub', 'restaurant', 'cafe', 'biergarten'].includes(t.amenity)) k = 'wirt';
-      else if (['carpenter', 'metal_construction', 'stonemason', 'joiner'].includes(t.craft) || t.shop === 'car_repair' || t.man_made === 'works') k = 'werk';
-      else if (['supermarket', 'doityourself', 'hardware', 'convenience', 'bakery', 'butcher', 'car'].includes(t.shop)) k = 'handel';
-      else if (t.amenity === 'place_of_worship') k = 'kirche';
-      else if (t.railway === 'station') k = 'bahnhof';
-      else if (t.aeroway === 'aerodrome') k = 'flug';
-      else if (t.man_made === 'observatory') k = 'sternwarte';
-      else if (t.historic === 'castle' || t.historic === 'city_gate' || t.historic === 'tower') k = 'burg';
-      else k = 'attr';
-      const p = { k, n: t.name || '', x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10 };
-      if (t.place) p.r = { city: 0, town: 1, village: 2, suburb: 3, hamlet: 4, locality: 5 }[t.place];
-      if (t.ele) p.e = num(t.ele);
-      if (t.amenity && t.amenity !== 'fuel' && k !== 'wirt' && k !== 'kirche') p.a = t.amenity;
-      if (t.tourism) p.tr = t.tourism;
-      if (t.shop) p.s = t.shop;
-      if (t.craft) p.c = t.craft;
-      if (x < minX || x > maxX || z < minZ || z > maxZ) continue;
-      pois.push(p);
+  if (!o.geo) {
+    const poiEls = [];
+    for (const c of pq) {
+      const json = await o.osm(poiQuery(c), o.cache ? `${o.cache}/poi_${c[0].toFixed(3)}_${c[1].toFixed(3)}.json.gz` : null);
+      poiEls.push(...(json.elements || []));
+      if (!o.noSleep) await sleep(1200);
     }
-    if (!o.noSleep) await sleep(1200);
-  }
+    classifyPois(poiEls, pois, minX, maxX, minZ, maxZ);
+  } else classifyPois(o.geo.pois, pois, minX, maxX, minZ, maxZ);
   log(`POIs: ${pois.length}`);
 
   // 2) Landnutzung
@@ -569,12 +634,13 @@ async function writeOverview(out, meta, heights, landuse, ctx) {
   fs.writeFileSync(path.join(out, 'overview.json'), JSON.stringify({ w: W, h: H, cellM: CFG.ovCell }));
 }
 
-module.exports = { CFG, proj, unproj, buildMap, processElements, newCtx, assembleRings, fillRings, mainQuery, poiQuery, demProviderTerrarium, overpass };
+module.exports = { CFG, proj, unproj, buildMap, loadGeojson, processElements, newCtx, assembleRings, fillRings, mainQuery, poiQuery, demProviderTerrarium, overpass };
 
 if (require.main === module) {
   const args = process.argv.slice(2);
   const arg = (n, d) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : d; };
   const outDir = path.resolve(arg('--out', 'public/world'));
   const cache = path.resolve(arg('--cache', '.cache/map'));
-  buildMap({ outDir, cache, osm: overpass, dem: demProviderTerrarium(cache) }).catch((e) => { console.error('KARTENBAU FEHLGESCHLAGEN:', e); process.exit(1); });
+  const gj = arg('--geojson', null);
+  (gj ? loadGeojson(path.resolve(gj)) : Promise.resolve(null)).then((geo) => buildMap({ outDir, cache, geo, osm: overpass, dem: demProviderTerrarium(cache) })).catch((e) => { console.error('KARTENBAU FEHLGESCHLAGEN:', e); process.exit(1); });
 }

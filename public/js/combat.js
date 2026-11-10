@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { G, net, invAdd, invCount, clamp } from './state.js';
 import { PROJ, VEH } from './config.js';
-import { getHeight, raycastTerrain, sculpt, isProtected } from './terrain.js';
+import { getHeight, raycastTerrain, sculpt, isProtected, waterLevelAt } from './terrain.js';
 import { rayBoxes, pointInBoxes, addBox, removeBox, mkBox, lam } from './world.js';
 import { makeProjectile } from './models.js';
 import { sfx } from './audio.js';
@@ -205,12 +205,13 @@ export function updateProjectiles(dt) {
         pr.vel.y -= spec.g * sdt;
         pr.pos.addScaledVector(pr.vel, sdt);
         const g = getHeight(pr.pos.x, pr.pos.z);
-        if (pr.pos.y <= Math.max(g, -0.5)) {
+        const wl0 = waterLevelAt(pr.pos.x, pr.pos.z), gw = Math.max(g, wl0);
+        if (pr.pos.y <= gw) {
           if (spec.bounce) {
-            pr.pos.y = Math.max(g, -0.5) + 0.06;
+            pr.pos.y = gw + 0.06;
             pr.vel.y = Math.abs(pr.vel.y) * 0.35; pr.vel.x *= 0.6; pr.vel.z *= 0.6;
             if (pr.vel.lengthSq() < 1) pr.stopped = true;
-          } else { hit = true; pr.pos.y = Math.max(g, -0.5) + 0.1; }
+          } else { hit = true; pr.pos.y = gw + 0.1; }
           continue;
         }
         if (pointInBoxes(pr.pos.x, pr.pos.y, pr.pos.z, 0.1)) {

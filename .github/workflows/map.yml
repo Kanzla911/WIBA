@@ -16,7 +16,7 @@ concurrency:
 jobs:
   map:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -30,8 +30,19 @@ jobs:
       - name: Kartenbau-Test
         run: node test/map-test.js
 
-      - name: Echte Karte laden und bauen
-        run: node tools/build-map.js --out public/world --cache .cache/map
+      - name: OpenStreetMap-Auszug laden und Gebiet ausschneiden
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq osmium-tool
+          curl -L --fail --retry 5 -o austria.osm.pbf https://download.geofabrik.de/europe/austria-latest.osm.pbf
+          ls -la austria.osm.pbf
+          osmium extract -b 13.43,47.77,13.77,48.06 austria.osm.pbf -o region.osm.pbf
+          osmium export region.osm.pbf -f geojsonseq -o region.geojsonseq
+          rm austria.osm.pbf
+          ls -la region.osm.pbf region.geojsonseq
+          head -c 600 region.geojsonseq
+
+      - name: Karte bauen
+        run: node tools/build-map.js --out public/world --cache .cache/map --geojson region.geojsonseq
 
       - name: Ergebnis pruefen
         run: |
@@ -44,7 +55,8 @@ jobs:
           git config user.name "WIBA Kartenbau"
           git config user.email "actions@users.noreply.github.com"
           git add -f public/world
-          git commit -m "Echte Karte: Voecklabruck - Attersee - Weissenbachtal (OSM + Hoehenmodell)" || echo "keine Aenderung"
+          git commit -q -m "Echte Karte: Voecklabruck - Attersee - Weissenbachtal (OSM + Hoehenmodell)" || echo "keine Aenderung"
+          git pull --rebase -q origin "${{ github.ref_name }}"
           git push
 
       - name: WIBA.exe neu bauen
