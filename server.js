@@ -63,9 +63,9 @@ function planWorld() {
   };
   const spawns = [];
   const put = (type, x, z) => { const s = roadSpot(x, z); spawns.push([type, s[0], hAt(s[0], s[1]), s[1], s[2]]); };
-  for (const [dx, dz] of [[20, 20], [-30, 10], [10, -40], [-50, -50]]) put('auto', dx, dz);
-  for (const [dx, dz] of [[120, 90], [140, 100], [-160, 120]]) put('bagger', dx, dz);
-  const places = pois.filter((p) => p.k === 'place' && p.r <= 2 && Math.hypot(p.x, p.z) > 400).sort((a, b) => a.r - b.r).slice(0, 45);
+  for (const [dx, dz] of [[-70, -120], [-120, -150], [-80, -190], [-150, -90], [0, -100]]) put('auto', dx, dz);
+  for (const [dx, dz] of [[60, -60], [80, -40], [-260, -40]]) put('bagger', dx, dz);
+  const places = pois.filter((p) => p.k === 'place' && p.r <= 2 && Math.hypot(p.x + 727, p.z + 106) > 300).sort((a, b) => a.r - b.r).slice(0, 45);
   for (const p of places) { put('auto', p.x + 15, p.z + 10); if (p.r <= 1) { put('auto', p.x - 40, p.z - 30); put('bagger', p.x + 80, p.z - 60); } }
   // Flugplatz: echter (OSM) oder flachster Wiesenstreifen in Stadtnaehe
   let air = null;

@@ -213,9 +213,10 @@ function updatePlayers(dt) {
 }
 
 // ---------- Netzwerk ----------
+const SPAWN = [-90, -140]; // Stadtplatz Voecklabruck (zwischen den Stadttuermen)
 // Spawn am Stadtplatz: erst wenn die Umgebung geladen ist, einen freien Platz suchen
 function spawnMe() {
-  me.pos.set((Math.random() - 0.5) * 20, 0, (Math.random() - 0.5) * 20);
+  me.pos.set(SPAWN[0] + (Math.random() - 0.5) * 20, 0, SPAWN[1] + (Math.random() - 0.5) * 20);
   me.pos.y = getHeight(me.pos.x, me.pos.z) + 1;
   me.vel.set(0, 0, 0); me.yaw = 0; me.pitch = 0; me.chute = false;
   G.spawnPending = 0.01;
@@ -224,7 +225,7 @@ function spawnMe() {
 function finishSpawn() {
   for (let t = 0; t < 200; t++) {
     const a = Math.random() * 6.283, d = Math.sqrt(t) * 5;
-    const x = Math.cos(a) * d + (t ? 0 : me.pos.x), z = Math.sin(a) * d + (t ? 0 : me.pos.z);
+    const x = t ? SPAWN[0] + Math.cos(a) * d : me.pos.x, z = t ? SPAWN[1] + Math.sin(a) * d : me.pos.z;
     if (!polyAt(x, z, 1.2) && waterLevelAt(x, z) < -1e8) { me.pos.set(x, getHeight(x, z), z); break; }
   }
   me.vel.set(0, 0, 0);

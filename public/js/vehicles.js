@@ -358,7 +358,7 @@ function hudFor(v) {
   if (v.type === 'auto') {
     return `<h3>🛻 ${v.spec.name}</h3>Zustand: ${hp}%<br>Tempo: ${Math.round(Math.abs(v.speed) * 3.6)} km/h<small>W/S Gas · A/D lenken · H Hupe · E raus</small>`;
   }
-  const alt = Math.max(0, Math.round(v.pos.y));
+  const alt = Math.round(v.pos.y + M.meta.yoff);
   let a = '';
   if (v.type === 'jet') a = `MG ${v.ammo.mg} · Raketen ${v.ammo.rakete} · Bomben ${v.ammo.bombe}`;
   else a = `Jauchebomben ${v.ammo.bombe}`;

@@ -605,7 +605,7 @@ async function writeOverview(out, meta, heights, landuse, ctx) {
     const col = COL[landuse[c]] || COL[0];
     const hn = heights[Math.min(meta.nx - 1, i + 1) + j * meta.nx], hw = heights[Math.max(0, i - 1) + j * meta.nx];
     const hs = heights[i + Math.min(meta.nz - 1, j + 1) * meta.nx], hnn = heights[i + Math.max(0, j - 1) * meta.nx];
-    const shade = Math.max(0.6, Math.min(1.35, 1 + ((hw - hn) + (hnn - hs)) * 0.012));
+    const shade = landuse[c] === 4 ? 1 : Math.max(0.6, Math.min(1.35, 1 + ((hw - hn) + (hnn - hs)) * 0.012));
     const o = (y * W + x) * 4;
     png.data[o] = Math.min(255, col[0] * shade); png.data[o + 1] = Math.min(255, col[1] * shade); png.data[o + 2] = Math.min(255, col[2] * shade); png.data[o + 3] = 255;
   }

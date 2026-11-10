@@ -226,7 +226,7 @@ function tri(B, a, b, c, col, ua, ub, uc, up) {
   let ny = (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2]);
   let nz = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
   const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
-  if (up && ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
+  if (up && ny < 0) { nx = -nx; ny = -ny; nz = -nz; const tb = b; b = c; c = tb; const tu = ub; ub = uc; uc = tu; }
   B.p.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
   B.n.push(nx, ny, nz, nx, ny, nz, nx, ny, nz);
   B.c.push(col[0], col[1], col[2], col[0], col[1], col[2], col[0], col[1], col[2]);

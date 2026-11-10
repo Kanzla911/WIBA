@@ -178,6 +178,7 @@ function drawMap(ctx, W, H, cx, cz, s, big) {
   // Fahrzeuge
   for (const v of G.vehicles.values()) {
     if (v.dead || v === G.me.vehicle || !vis(v.pos.x, v.pos.z)) continue;
+    if (big && s < 0.05 && v.type !== 'jet' && v.type !== 'flieger') continue;
     ctx.font = (big ? 16 : 12) + 'px sans-serif'; ctx.fillText(VICON[v.type], X(v.pos.x), Y(v.pos.z));
   }
   // Wegpunkt
