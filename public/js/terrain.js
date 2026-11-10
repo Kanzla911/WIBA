@@ -109,6 +109,19 @@ function generate() {
   for (let i = 0; i < V * V; i++) {
     if (wBuf[i] > 0) { heights[i] += (vBuf[i] - heights[i]) * wBuf[i]; if (wBuf[i] > 0.6) mask[i] = 1; }
   }
+  // Fahrbahn glaetten (keine Stufen zwischen benachbarten Kehren)
+  const tmp = new Float32Array(V * V);
+  for (let pass = 0; pass < 4; pass++) {
+    tmp.set(heights);
+    for (let j = 1; j < GRID; j++) for (let i = 1; i < GRID; i++) {
+      const idx = i + j * V;
+      if (mask[idx] !== 1) continue;
+      let sm = 0, n = 0;
+      for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) { const q = idx + a + b * V; if (mask[q] === 1) { sm += tmp[q]; n++; } }
+      heights[idx] = sm / n;
+    }
+  }
+  for (const rd of roadData) for (const p of rd.pts) p[2] = Math.max(0.9, getHeight(p[0], p[1]));
   // Fluesse einschneiden
   wBuf.fill(0);
   for (const r of RIVERS) {
