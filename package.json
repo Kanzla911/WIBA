@@ -11,7 +11,7 @@
     "test": "node test/smoke.js",
     "map": "node tools/build-map.js",
     "test:map": "node test/map-test.js",
-    "dist:arm": "electron-builder --win portable --arm64 --publish never -c.portable.artifactName=WIBA-ARM64.exe"
+    "dist:arm": "electron-builder --win portable --arm64 --publish never --config.portable.artifactName=WIBA-ARM64.exe"
   },
   "engines": {
     "node": ">=18"
