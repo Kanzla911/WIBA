@@ -107,6 +107,53 @@ export function makeItem(id) {
   return g;
 }
 
+// ---------- Teile zu wenigen Meshes zusammenfassen (weniger Zeichenaufrufe = mehr FPS) ----------
+function concatGeos(list, colors) {
+  let n = 0; for (const g of list) n += g.attributes.position.count;
+  const P = new Float32Array(n * 3), N = new Float32Array(n * 3), C = colors ? new Float32Array(n * 3) : null;
+  const allUv = list.every((g) => g.attributes.uv), U = allUv ? new Float32Array(n * 2) : null;
+  let o = 0;
+  list.forEach((g, k) => {
+    const c = g.attributes.position.count;
+    P.set(g.attributes.position.array, o * 3); N.set(g.attributes.normal.array, o * 3);
+    if (U) U.set(g.attributes.uv.array.subarray(0, c * 2), o * 2);
+    if (C) { const col = colors[k]; for (let i = 0; i < c; i++) { C[(o + i) * 3] = col.r; C[(o + i) * 3 + 1] = col.g; C[(o + i) * 3 + 2] = col.b; } }
+    o += c;
+  });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.BufferAttribute(N, 3));
+  if (U) g.setAttribute('uv', new THREE.BufferAttribute(U, 2));
+  if (C) g.setAttribute('color', new THREE.BufferAttribute(C, 3));
+  g.computeBoundingSphere();
+  return g;
+}
+const bakedMats = new Map();
+// colored: alle Teile in EIN Mesh mit Vertexfarben; sonst ein Mesh pro Material
+export function bakeGroup(group, opt = {}) {
+  const keep = opt.keep || [], buckets = new Map();
+  for (const c of [...group.children]) {
+    if (!c.isMesh || c.isInstancedMesh || keep.includes(c) || !c.geometry.attributes.normal) continue;
+    c.updateMatrix();
+    const g = (c.geometry.index ? c.geometry.toNonIndexed() : c.geometry.clone());
+    g.applyMatrix4(c.matrix);
+    const key = opt.colored ? (c.material.transparent ? 'glass' : 'all') : c.material.uuid;
+    if (!buckets.has(key)) buckets.set(key, { mat: c.material, geos: [], cols: [], shadow: c.castShadow });
+    const b = buckets.get(key); b.geos.push(g); b.cols.push(c.material.color || new THREE.Color(1, 1, 1));
+    group.remove(c);
+  }
+  for (const [key, b] of buckets) {
+    let mat = b.mat;
+    if (opt.colored && key === 'all') {
+      const mk = (opt.rough || 0.75) + '|' + (opt.metal || 0);
+      mat = bakedMats.get(mk);
+      if (!mat) { mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: opt.rough || 0.75, metalness: opt.metal || 0 }); bakedMats.set(mk, mat); }
+    }
+    const m = new THREE.Mesh(concatGeos(b.geos, opt.colored && key === 'all' ? b.cols : null), mat);
+    m.castShadow = b.shadow; m.receiveShadow = true;
+    group.add(m);
+  }
+}
+
 // ---------- Materialien (PBR) ----------
 const stdCache = new Map();
 export function std(color, rough = 0.8, metal = 0, extra) {
@@ -198,6 +245,7 @@ export function makeAvatar(color, look) {
     chute.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x333333 })));
   }
   chute.visible = false; group.add(chute);
+  for (const g of [body, legL, legR, armL, armR, head]) bakeGroup(g, { colored: true });
   let itemId = null, itemObj = null;
   return {
     group, body, legL, legR, armL, armR, head, hand, chute,
@@ -247,6 +295,7 @@ export function makeBagger() {
   const bucket = new THREE.Group(); bucket.position.set(0, 0, BAGGER.L2); stick.add(bucket);
   bucket.add(extrudeSide([[-0.25, 0.3], [0.55, 0.3], [0.95, -0.1], [0.9, -0.6], [0.5, -0.98], [0.0, -0.9], [-0.25, -0.4]], 1.2, 0.03, steel));
   for (let i = -2; i <= 2; i++) { const t = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.3, 6), chrome); t.position.set(i * 0.25, -1.05, 0.6); t.rotation.x = 2.6; bucket.add(t); }
+  for (const g of [group, upper, boom, stick, bucket]) bakeGroup(g);
   return { group, upper, boom, stick, bucket };
 }
 // r: horizontale Reichweite ab Drehpunkt, ty: Zielhoehe relativ zum Baggerursprung
@@ -287,6 +336,7 @@ function wheel(r, w, x, y, z) {
   const rim = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.62, r * 0.62, w + 0.02, 20), std(0xb9bcc2, 0.3, 0.9)); rim.rotation.z = Math.PI / 2; g.add(rim);
   const hub = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.2, r * 0.2, w + 0.05, 12), std(0x30323a, 0.4, 0.8)); hub.rotation.z = Math.PI / 2; g.add(hub);
   g.position.set(x, y, z);
+  bakeGroup(g, { colored: true, rough: 0.6, metal: 0.4 });
   return g;
 }
 const GLASS = () => std(0x0c1820, 0.06, 0.9);
@@ -310,6 +360,7 @@ export function makeAuto() {
   group.add(part(new THREE.BoxGeometry(0.9, 0.16, 0.05), std(0x202226, 0.5, 0.4), 0, 0.62, 2.2));
   const wheels = [];
   for (const [x, z] of [[0.82, 1.36], [-0.82, 1.36], [0.82, -1.34], [-0.82, -1.34]]) { const w = wheel(0.34, 0.24, x, 0.34, z); group.add(w); wheels.push(w); }
+  bakeGroup(group);
   return { group, wheels };
 }
 
@@ -332,6 +383,7 @@ export function makeFlieger() {
     group.add(wheel(0.24, 0.16, x, 0.24, 1.0));
   }
   group.add(wheel(0.13, 0.1, 0, 0.13, -3.7));
+  bakeGroup(b); bakeGroup(group);
   return { group, prop };
 }
 
@@ -360,6 +412,7 @@ export function makeJet() {
     group.add(part(new THREE.CylinderGeometry(0.045, 0.045, 0.95, 8), std(0xa0a6ae, 0.4, 0.8), x, 0.6, z));
     group.add(wheel(0.25, 0.16, x, 0.25, z));
   }
+  bakeGroup(b, { keep: [flame] }); bakeGroup(group);
   return { group, flame };
 }
 

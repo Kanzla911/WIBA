@@ -4,6 +4,7 @@ import { ITEMS, HOTBAR_ORDER, SHOPS, RECIPES, VEH, WEAPONS } from './config.js';
 import { M, zoneName } from './terrain.js';
 import { pois } from './world.js';
 import { sfx } from './audio.js';
+import { nav, requestRoute, clearRoute, routeLeft } from './navi.js';
 
 const $ = (id) => document.getElementById(id);
 let mapCtx = null;
@@ -112,7 +113,8 @@ export function updateHUD(dt) {
   $('effects').textContent = fx.join(' · ');
   const hrs = (G.dayT * 24);
   const hh = Math.floor(hrs), mm = Math.floor((hrs - hh) * 60);
-  const wpt = G.waypoint ? ` · 📌 ${(Math.hypot(G.waypoint.x - me.pos.x, G.waypoint.z - me.pos.z) / 1000).toFixed(1)} km` : '';
+  const rl = routeLeft();
+  const wpt = G.waypoint ? ` · 📌 ${rl ? (rl.dist / 1000).toFixed(1) + ' km · ' + Math.max(1, Math.round(rl.time / 60)) + ' min' : (Math.hypot(G.waypoint.x - me.pos.x, G.waypoint.z - me.pos.z) / 1000).toFixed(1) + ' km'}` : '';
   $('loc').textContent = `📍 ${zoneName(me.pos.x, me.pos.z)} · ${Math.round(me.pos.y + M.meta.yoff)} m · ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')} Uhr${wpt}`;
   drawMinimap();
   if (!$('score').classList.contains('hidden')) renderScore();
@@ -181,6 +183,19 @@ function drawMap(ctx, W, H, cx, cz, s, big) {
     if (big && s < 0.05 && v.type !== 'jet' && v.type !== 'flieger') continue;
     ctx.font = (big ? 16 : 12) + 'px sans-serif'; ctx.fillText(VICON[v.type], X(v.pos.x), Y(v.pos.z));
   }
+  // Route (violett wie in GTA)
+  if (nav.route && G.waypoint) {
+    const P = nav.route.pts;
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    for (const [w, c] of [[big ? 8 : 6, 'rgba(40,0,60,0.8)'], [big ? 5 : 3.6, '#c23cff']]) {
+      ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath();
+      const me0 = G.me.vehicle ? G.me.vehicle.pos : G.me.pos;
+      ctx.moveTo(X(me0.x), Y(me0.z));
+      for (let i = nav.idx * 2; i < P.length; i += 2) ctx.lineTo(X(P[i]), Y(P[i + 1]));
+      ctx.lineTo(X(G.waypoint.x), Y(G.waypoint.z));
+      ctx.stroke();
+    }
+  }
   // Wegpunkt
   const wp = G.waypoint;
   if (wp) {
@@ -188,7 +203,7 @@ function drawMap(ctx, W, H, cx, cz, s, big) {
     if (!big) { const dx = x - W / 2, dy = y - H / 2, d = Math.hypot(dx, dy), lim = W / 2 - 9; if (d > lim) { x = W / 2 + (dx / d) * lim; y = H / 2 + (dy / d) * lim; } }
     ctx.fillStyle = '#ff3df0'; ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(x, y, big ? 8 : 5, 0, 6.3); ctx.fill(); ctx.stroke();
-    if (big) { ctx.strokeStyle = 'rgba(255,61,240,0.75)'; ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.moveTo(X(G.me.pos.x), Y(G.me.pos.z)); ctx.lineTo(x, y); ctx.stroke(); ctx.setLineDash([]); }
+    if (big && !nav.route) { ctx.strokeStyle = 'rgba(255,61,240,0.75)'; ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.moveTo(X(G.me.pos.x), Y(G.me.pos.z)); ctx.lineTo(x, y); ctx.stroke(); ctx.setLineDash([]); }
   }
   // Mitspieler
   for (const p of G.players.values()) {
@@ -230,8 +245,14 @@ function initBigMap() {
   window.addEventListener('mouseup', (e) => {
     if (!drag || !bigOpen) { drag = null; return; }
     if (!drag.moved) {
-      if (drag.btn === 2) G.waypoint = null;
-      else { G.waypoint = { x: bcx + (e.clientX - bigCv.width / 2) / bs, z: bcz + (e.clientY - bigCv.height / 2) / bs }; sfx.buy(); }
+      if (drag.btn === 2) { G.waypoint = null; clearRoute(); }
+      else {
+        let wx = bcx + (e.clientX - bigCv.width / 2) / bs, wz = bcz + (e.clientY - bigCv.height / 2) / bs, label = null;
+        let bd = 14 / bs; // auf Symbole in der Naehe einrasten
+        for (const q of M.pois) { if (q.k === 'peak' || (q.k === 'place' && q.r > 3)) continue; const d = Math.hypot(q.x - wx, q.z - wz); if (d < bd) { bd = d; label = q.n || null; wx = q.x; wz = q.z; } }
+        for (const q of pois) { const d = Math.hypot(q.x - wx, q.z - wz); if (d < bd) { bd = d; label = q.label; wx = q.x; wz = q.z; } }
+        G.waypoint = { x: wx, z: wz, label }; clearRoute(); requestRoute(); sfx.buy();
+      }
       drawBig();
     }
     drag = null;
@@ -250,9 +271,11 @@ function drawBig() {
   ctx.fillStyle = 'rgba(18,21,27,0.85)'; ctx.fillRect(14, H - 118, 700, 104);
   ctx.fillStyle = '#ffd21f'; ctx.font = 'bold 15px "Trebuchet MS", Arial'; ctx.fillText('KARTE – Vöcklabruck · Attersee · Höllengebirge', 26, H - 94);
   ctx.fillStyle = '#fff'; ctx.font = '13px "Trebuchet MS", Arial';
-  ctx.fillText('Ziehen = verschieben · Mausrad = zoomen · Klick = Wegpunkt · Rechtsklick = löschen · M = zu', 26, H - 72);
+  ctx.fillText('Ziehen = verschieben · Mausrad = zoomen · Klick = Ziel setzen (schnellste Route) · Rechtsklick = löschen · M = zu', 26, H - 72);
   ctx.fillText('🍺 Wirtshaus  🔧 Werkstatt  💰 Laden  ⛽ Tankstelle  🌿 Der Franz  ⛪ Kirche  ★ Sehenswert  ▲ Gipfel', 26, H - 50);
-  ctx.fillText('🚜 Bagger  🛻 Auto  🛩️ Flieger  ✈️ Jet / Flugplatz  ● Mitspieler  ▲ du' + (G.waypoint ? `   ·   Wegpunkt: ${(Math.hypot(G.waypoint.x - G.me.pos.x, G.waypoint.z - G.me.pos.z) / 1000).toFixed(1)} km` : ''), 26, H - 28);
+  const rl = routeLeft();
+  const wtxt = G.waypoint ? `   ·   ${G.waypoint.label ? G.waypoint.label + ': ' : 'Ziel: '}` + (rl ? `${(rl.dist / 1000).toFixed(1)} km, ca. ${Math.max(1, Math.round(rl.time / 60))} min` : (nav.pending ? 'Route wird berechnet…' : `${(Math.hypot(G.waypoint.x - G.me.pos.x, G.waypoint.z - G.me.pos.z) / 1000).toFixed(1)} km Luftlinie`)) : '';
+  ctx.fillText('🚜 Bagger  🛻 Auto  🛩️ Flieger  ✈️ Jet / Flugplatz  ● Mitspieler  ▲ du' + wtxt, 26, H - 28);
   // Massstab
   const km = bs > 0.3 ? 0.1 : (bs > 0.06 ? 1 : 5), len = km * 1000 * bs;
   ctx.fillStyle = 'rgba(18,21,27,0.85)'; ctx.fillRect(W - len - 44, H - 52, len + 30, 38);

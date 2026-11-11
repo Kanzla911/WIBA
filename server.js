@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { WebSocketServer } = require('ws');
+const { createRouter } = require('./route');
 
 const PUBLIC = path.join(__dirname, 'public');
 const MIME = {
@@ -125,6 +126,8 @@ function startServer(opts = {}) {
   const t0 = Date.now();
 
   const plan = planWorld();
+  const router = createRouter(path.join(PUBLIC, 'world'));
+  router.warm();
   plan.spawns.forEach((s, i) => {
     const id = i + 1;
     vehicles.set(id, {
@@ -156,6 +159,14 @@ function startServer(opts = {}) {
     if (url === '/info') {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify({ ips: lanIPs(), port: server.address().port, players: players.size }));
+      return;
+    }
+    if (url === '/route') {
+      const q = new URL(req.url, 'http://x').searchParams, f = (k) => parseFloat(q.get(k));
+      let r = null;
+      if ([f('ax'), f('az'), f('bx'), f('bz')].every(Number.isFinite)) r = router.route(f('ax'), f('az'), f('bx'), f('bz'));
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify(r || { error: 'keine Route' }));
       return;
     }
     if (url === '/') url = '/index.html';

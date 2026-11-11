@@ -94,6 +94,12 @@ export function exitVehicle() {
     const lx = Math.cos(v.heading), lz = -Math.sin(v.heading);
     const off = v.spec.radius * 0.75 + 0.8;
     me.pos.set(v.pos.x + lx * off, 0, v.pos.z + lz * off);
+    for (const off2 of [off, -off]) {
+      const tx = v.pos.x + lx * off2, tz = v.pos.z + lz * off2;
+      if (!polyAt(tx, tz, 0.5)) { me.pos.x = tx; me.pos.z = tz; break; }
+      const fx = v.pos.x + Math.sin(v.heading) * (off2 > 0 ? 3.4 : -3.4), fz = v.pos.z + Math.cos(v.heading) * (off2 > 0 ? 3.4 : -3.4);
+      if (!polyAt(fx, fz, 0.5)) { me.pos.x = fx; me.pos.z = fz; break; }
+    }
     me.pos.y = Math.max(getHeight(me.pos.x, me.pos.z), v.pos.y - 0.5);
     me.vel.set(0, 0, 0);
     v.speed = 0;
@@ -155,13 +161,6 @@ function crash(v, text) {
   explode(_t.copy(v.pos).setY(v.pos.y + 1), 'wrack', G.me.id, true, 0);
 }
 
-function boxBlocks(x, z, y) {
-  for (const b of boxes) {
-    if (x > b.x0 - 1.2 && x < b.x1 + 1.2 && z > b.z0 - 1.2 && z < b.z1 + 1.2 && b.y1 > y + 0.7 && b.y0 < y + 2.4) return true;
-  }
-  const pp = polyAt(x, z, 1.1);
-  return !!(pp && pp.top > y + 0.7);
-}
 
 function orientGround(v, dt, snap) {
   refY = v.pos.y;
@@ -176,8 +175,21 @@ function orientGround(v, dt, snap) {
   v.quat.setFromEuler(_e.set(v.pitchS, v.yaw, v.rollS, 'YXZ'));
 }
 
+// Umriss des Fahrzeugs gegen Gebaeude/Bauteile pruefen (Ecken + Seitenpunkte)
+function hullHits(v, x, z, yaw) {
+  const isB = v.type === 'bagger', L = isB ? 2.55 : 2.3, W = isB ? 1.65 : 1.0, y = v.pos.y;
+  const sx = Math.sin(yaw), cz = Math.cos(yaw);
+  for (const u of [-1, -0.5, 0, 0.5, 1]) for (const w of [-1, 1]) {
+    const px = x + sx * u * L + cz * w * W, pz = z + cz * u * L - sx * w * W;
+    const pp = polyAt(px, pz, 0.15);
+    if (pp && pp.top > y + 0.6 && pp.base < y + 2.2) return true;
+    for (const b of boxes) if (px > b.x0 - 0.15 && px < b.x1 + 0.15 && pz > b.z0 - 0.15 && pz < b.z1 + 0.15 && b.y1 > y + 0.6 && b.y0 < y + 2.2) return true;
+  }
+  return false;
+}
 function simGround(v, dt) {
   refY = v.pos.y;
+  const yaw0 = v.yaw;
   const k = G.keys, m = G.mouse, isB = v.type === 'bagger';
   const fwdIn = (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0), rawTurn = (k.KeyA ? 1 : 0) - (k.KeyD ? 1 : 0);
   // Alkohol: verzoegerte Lenkung + Schlangenlinien
@@ -197,6 +209,9 @@ function simGround(v, dt) {
     const grip = clamp(Math.abs(v.speed) / 5, 0, 1) * (1.7 - Math.min(0.9, Math.abs(v.speed) / 28));
     v.yaw += turnIn * grip * dt * (v.speed < 0 ? -1 : 1);
   }
+  const stuck = hullHits(v, v.pos.x, v.pos.z, yaw0);
+  // Lenken nur, wenn sich das Heck/die Front dabei nicht in eine Mauer dreht
+  if (v.yaw !== yaw0 && !stuck && hullHits(v, v.pos.x, v.pos.z, v.yaw)) v.yaw = yaw0;
   const sx = Math.sin(v.yaw), cz = Math.cos(v.yaw);
   const dir = Math.sign(v.speed);
   if (dir !== 0) {
@@ -204,10 +219,17 @@ function simGround(v, dt) {
     const probe = 2.5;
     const h0 = getHeight(v.pos.x, v.pos.z), h1 = getHeight(nx + sx * probe * dir, nz + cz * probe * dir);
     const maxSlope = isB ? 1.3 : 1.1;
-    if ((h1 - h0) / probe > maxSlope || waterLevelAt(nx + sx * probe * dir, nz + cz * probe * dir) - h1 > 1.1 || !inWorld(nx, nz, 30) || boxBlocks(nx + sx * probe * dir * 0.8, nz + cz * probe * dir * 0.8, v.pos.y)) {
-      if (Math.abs(v.speed) > 12) { net.send({ t: 'vdmg', id: v.id, d: Math.abs(v.speed) * 2 }); sfx.dig(); }
-      v.speed = 0;
+    const terrainBlock = (h1 - h0) / probe > maxSlope || waterLevelAt(nx + sx * probe * dir, nz + cz * probe * dir) - h1 > 1.1 || !inWorld(nx, nz, 30);
+    if (terrainBlock || (!stuck && hullHits(v, nx, nz, v.yaw))) {
+      if (Math.abs(v.speed) > 12) { net.send({ t: 'vdmg', id: v.id, d: Math.abs(v.speed) * 2 }); sfx.dig(); G.me.shake = Math.max(G.me.shake, Math.min(1, Math.abs(v.speed) / 25)); }
+      v.speed = -v.speed * 0.15; // leicht zurueckprallen
     } else { v.pos.x = nx; v.pos.z = nz; }
+  } else if (stuck) {
+    // im Haus festgesteckt (z. B. beim Spawn): langsam herausschieben
+    for (const a of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+      const ex = v.pos.x + Math.sin(v.yaw + a) * 0.6, ez = v.pos.z + Math.cos(v.yaw + a) * 0.6;
+      if (!hullHits(v, ex, ez, v.yaw)) { v.pos.x = ex; v.pos.z = ez; break; }
+    }
   }
   const g = getHeight(v.pos.x, v.pos.z);
   v.pos.y += (g - v.pos.y) * Math.min(1, 14 * dt);
@@ -370,8 +392,13 @@ function hudFor(v) {
 let hudT = 0;
 export function updateVehicles(dt) {
   const mine = G.me.vehicle;
+  const cam = G.camera.position;
   for (const v of G.vehicles.values()) {
     if (v.dead) continue;
+    // weit entfernte, abgestellte Fahrzeuge nicht zeichnen und nicht rechnen
+    const far = v !== mine && v.pos.distanceToSquared(cam) > (v.driver && isAir(v) ? 4000 * 4000 : 650 * 650);
+    v.group.visible = !far;
+    if (far && !v.driver) continue;
     if (v === mine) {
       if (isAir(v)) simAir(v, dt); else simGround(v, dt);
       if (G.me.vehicle !== v) continue; // abgestuerzt

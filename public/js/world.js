@@ -499,7 +499,7 @@ function buildTrees(T, near) {
       m.compose(p.set(t[0], t[1] - 0.2, t[2]), q, s); im.setMatrixAt(i, m);
       if (hue >= 0) im.setColorAt(i, col.setHSL(hue + t[5] * 0.05, sat, lig + t[5] * 0.08)); else im.setColorAt(i, col.setScalar(0.8 + t[5] * 0.3));
     });
-    im.castShadow = near; im.receiveShadow = false;
+    im.castShadow = near && T.d === 0; im.receiveShadow = false;
     im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true;
     im.computeBoundingSphere();
     out.push(im);
@@ -513,7 +513,7 @@ function buildTrees(T, near) {
 }
 
 // ---------- Kachel-Streaming ----------
-let RB = 5, RT = 3, RN = 1; // Radius: Gebaeude/Strassen, ferne Baeume, nahe Baeume
+let RB = 4, RT = 3, RN = 1; // Radius: Gebaeude/Strassen, ferne Baeume, nahe Baeume
 const objTiles = new Map();
 let objKey = '', objQueue = [], fetching = 0;
 function loadTileData(T) {
@@ -522,14 +522,17 @@ function loadTileData(T) {
   fetching++; T.state = 0.5;
   fetch('./world/tiles/' + T.key + '.json').then((r) => (r.ok ? r.json() : {})).catch(() => ({})).then((d) => { fetching--; T.data = d; T.state = 1; });
 }
-function buildTileObjects(T) {
+// Kachel stueckweise bauen (Generator), damit kein Bild laenger als ein paar ms haengt
+function* buildTileGen(T) {
   const ox = T.tx * TILE, oz = T.tz * TILE, d = T.data;
   const W = Buf(), Rf = Buf(); W.g = Buf(); T.lamps = [];
   const G = { asphalt: Buf(), gravel: Buf(), paving: Buf(), rail: Buf(), line: Buf(), steel: Buf(), water: Buf(), walk: Buf() };
   T.group = new THREE.Group(); T.group.matrixAutoUpdate = false;
-  if (d.r) for (const r of d.r) addRoad(r, ox, oz, G, T);
-  if (d.w) for (const w of d.w) addWater(w, ox, oz, G);
-  if (d.b) for (const b of d.b) addBuilding(b, ox, oz, W, Rf, T.polys);
+  let c = 0;
+  if (d.r) for (const r of d.r) { addRoad(r, ox, oz, G, T); if (++c % 30 === 0) yield; }
+  if (d.w) for (const w of d.w) { addWater(w, ox, oz, G); if (++c % 30 === 0) yield; }
+  if (d.b) for (const b of d.b) { addBuilding(b, ox, oz, W, Rf, T.polys); if (++c % 45 === 0) yield; }
+  yield;
   for (const [B, mat, sh] of [[W, wallMat, true], [W.g, wallMatG, true], [Rf, roofMat, true], ...Object.keys(G).map((k) => [G[k], roadMats[k], false])]) {
     const m = meshOf(B, mat, sh); if (m) T.group.add(m);
   }
@@ -572,6 +575,7 @@ export function updateObjects(cx, cz, budgetMs = 6) {
       let T = objTiles.get(k);
       if (!T) { T = { key: k, tx, tz, state: 0, data: null, group: null, trees: [], treeLod: 0, polys: [], decks: [], roadCells: new Set() }; objTiles.set(k, T); }
       T.d = Math.max(Math.abs(dx), Math.abs(dz));
+      for (const im of T.trees) im.castShadow = T.d === 0;
       objQueue.push(T);
     }
     objQueue.sort((a, b) => a.d - b.d);
@@ -581,7 +585,10 @@ export function updateObjects(cx, cz, budgetMs = 6) {
   for (const T of objQueue) {
     if (T.state === 0) loadTileData(T);
     const wantTree = T.d <= RN ? 2 : (T.d <= RT ? 1 : 0);
-    if (T.state === 1 && performance.now() - t0 < budgetMs) buildTileObjects(T);
+    if (T.state === 1 && performance.now() - t0 < budgetMs) {
+      if (!T.gen) T.gen = buildTileGen(T);
+      while (performance.now() - t0 < budgetMs) if (T.gen.next().done) { T.gen = null; break; }
+    }
     if (T.state === 2 && T.treeLod !== wantTree && performance.now() - t0 < budgetMs) setTrees(T, wantTree);
     if (T.state < 2 || T.treeLod !== wantTree) { work = true; if (T.d <= 1) pendingNear = true; }
   }
@@ -596,7 +603,9 @@ export function nearRoad(x, z) {
 
 // ---------- Gras rund um den Spieler ----------
 let grass = null, grassX = 1e9, grassZ = 1e9;
-const GRASS_N = 16000, GRASS_STEP = 1.25, GRASS_R = 78;
+let GRASS_N = 14000;
+const GRASS_STEP = 1.25, GRASS_R = 78;
+export function setGrassLimit(n) { GRASS_N = Math.min(GRASS_N, n); if (grass) { grass.count = Math.min(grass.count, n); grassX = 1e9; } }
 export function updateGrass(cx, cz, agl, ready) {
   if (RN === 0) return; // niedrige Grafik: kein Gras
   if (!grass) {
@@ -608,12 +617,12 @@ export function updateGrass(cx, cz, agl, ready) {
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
-    grass = new THREE.InstancedMesh(g, new THREE.MeshLambertMaterial({ color: 0xffffff, map: tex('grass'), alphaTest: 0.35, side: THREE.DoubleSide }), GRASS_N);
+    grass = new THREE.InstancedMesh(g, new THREE.MeshLambertMaterial({ color: 0xffffff, map: tex('grass'), alphaTest: 0.35, side: THREE.DoubleSide }), 14000);
     grass.frustumCulled = false; grass.receiveShadow = true; grass.count = 0;
     grass.setColorAt(0, new THREE.Color(1, 1, 1));
     sceneRef.add(grass);
   }
-  if (agl > 120) { grass.visible = false; return; }
+  if (agl > 120 || GRASS_N <= 0) { grass.visible = false; return; }
   grass.visible = true;
   if (!ready || Math.hypot(cx - grassX, cz - grassZ) < 9) return;
   grassX = cx; grassZ = cz;
@@ -721,14 +730,15 @@ function buildClouds() {
     sceneRef.add(g); clouds.push(g);
   }
 }
-export function initWorld(scene, lowGfx, renderer) {
+export function initWorld(scene, gfx, renderer) {
   sceneRef = scene;
-  if (lowGfx) { RB = 3; RT = 2; RN = 0; }
+  const lowGfx = gfx === 'low';
+  if (lowGfx) { RB = 2; RT = 1; RN = 0; GRASS_N = 0; } else if (gfx === 'mid') { RB = 3; RT = 2; RN = 1; GRASS_N = 6000; }
   hemi = new THREE.HemisphereLight(0xcfe4ff, 0x7d7458, 1.0);
   scene.add(hemi);
   sun = new THREE.DirectionalLight(0xfff1d6, 2.2);
   sun.castShadow = lowGfx !== true;
-  sun.shadow.mapSize.set(4096, 4096);
+  sun.shadow.mapSize.set(gfx === 'high' ? 4096 : 2048, gfx === 'high' ? 4096 : 2048);
   const sc = sun.shadow.camera;
   sc.left = -110; sc.right = 110; sc.top = 110; sc.bottom = -110; sc.near = 10; sc.far = 560;
   sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.6;

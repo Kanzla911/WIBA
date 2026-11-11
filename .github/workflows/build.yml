@@ -29,24 +29,73 @@ jobs:
       - name: Server-Schnelltest
         run: node test/smoke.js
 
-      - name: WIBA.exe bauen
-        run: npm run dist
+      - name: WIBA.exe bauen (Intel/AMD, x64)
+        run: npx electron-builder --win portable --x64 --publish never -c.portable.artifactName=WIBA.exe
 
-      - name: WIBA.exe als Artefakt hochladen
+      - name: WIBA-ARM64.exe bauen (Windows auf ARM, z. B. Snapdragon)
+        run: npx electron-builder --win portable --arm64 --publish never -c.portable.artifactName=WIBA-ARM64.exe
+
+      - name: Windows-Versionen als Artefakt hochladen
         uses: actions/upload-artifact@v4
         with:
           name: WIBA-Windows
-          path: dist/WIBA.exe
+          path: |
+            dist/WIBA.exe
+            dist/WIBA-ARM64.exe
           if-no-files-found: error
 
-      - name: Release mit Download aktualisieren
+  mac:
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Mac-Versionen bauen (Apple Silicon + Intel)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npx electron-builder --mac zip --arm64 --publish never -c.mac.identity=null -c.mac.artifactName=WIBA-Mac-AppleSilicon.zip
+          npx electron-builder --mac zip --x64 --publish never -c.mac.identity=null -c.mac.artifactName=WIBA-Mac-Intel.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WIBA-Mac
+          path: dist/WIBA-Mac-*.zip
+          if-no-files-found: error
+
+  release:
+    needs: [windows, mac]
+    if: ${{ always() && needs.windows.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+
+      - run: ls -la out
+
+      - name: Release mit Downloads aktualisieren
         uses: softprops/action-gh-release@v2
         with:
           tag_name: wiba-latest
           name: WIBA – aktuelle Version
           body: |
-            **WIBA.exe** herunterladen, doppelklicken, spielen. Keine Installation noetig.
+            **Welche Datei?**
+            - **WIBA.exe** – normale Windows-PCs und Laptops (Intel / AMD Ryzen)
+            - **WIBA-ARM64.exe** – Windows-Geräte mit ARM-Chip (z. B. Snapdragon X, Surface Pro)
+            - **WIBA-Mac-AppleSilicon.zip** – Mac mit M1/M2/M3/M4 · **WIBA-Mac-Intel.zip** – ältere Macs
+
+            Herunterladen, starten, spielen – keine Installation nötig.
+            Mac: beim ersten Start Rechtsklick auf WIBA → „Öffnen" (die App ist nicht signiert).
 
             Automatisch gebaut aus Commit ${{ github.sha }}.
-          files: dist/WIBA.exe
+          files: out/*
           make_latest: true

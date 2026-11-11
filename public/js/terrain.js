@@ -105,14 +105,14 @@ export function zoneName(x, z) {
 }
 
 // ---------- Graben ----------
-const dirtyTiles = new Set();
+const dirtyTiles = new Set(), editedTiles = new Set();
 export function setVertex(i, h) {
   const fi = i % FW, fj = Math.floor(i / FW);
   edits.set(i, h);
   for (let b = -1; b <= 0; b++) for (let a = -1; a <= 0; a++) editBuckets.add(((fi + a) >> 3) + ((fj + b) >> 3) * 65536);
   editBuckets.add((fi >> 3) + (fj >> 3) * 65536);
   const x = MINX + fi * FC, z = MINZ + fj * FC;
-  for (const ox of [-FC, FC]) for (const oz of [-FC, FC]) dirtyTiles.add(Math.floor((x + ox) / TILE) + '_' + Math.floor((z + oz) / TILE));
+  for (const ox of [-FC, FC]) for (const oz of [-FC, FC]) { const k = Math.floor((x + ox) / TILE) + '_' + Math.floor((z + oz) / TILE); dirtyTiles.add(k); editedTiles.add(k); }
   for (const fn of editListeners) fn(x, z);
 }
 export function applyEdits(list) { for (const e of list) setVertex(e[0], e[1]); }
@@ -203,21 +203,26 @@ function indexFor(n) {
   return (idxCache[n] = n > 100 ? new Uint32Array(idx) : new Uint16Array(idx));
 }
 function buildTile(tx, tz, lod) {
-  const { step, n } = LODS[lod], s = n + 3; // +2 Randreihen als Schuerze
+  let { step, n } = LODS[lod];
+  if (lod === 0 && !editedTiles.has(tx + '_' + tz)) { step = 5; n = 100; } // feines 2,5-m-Raster nur, wo gegraben wurde
+  const s = n + 3; // +2 Randreihen als Schuerze
+  const x0 = tx * TILE, z0 = tz * TILE;
+  // Hoehen einmal abtasten (inkl. Rand fuer die Normalen)
+  const H = new Float32Array(s * s);
+  for (let j = 0; j < s; j++) for (let i = 0; i < s; i++) H[i + j * s] = getHeight(x0 + (i - 1) * step, z0 + (j - 1) * step);
   const pos = new Float32Array(s * s * 3), col = new Float32Array(s * s * 3), nor = new Float32Array(s * s * 3), uv = new Float32Array(s * s * 2);
-  const x0 = tx * TILE, z0 = tz * TILE, e = lod === 0 ? FC : step;
   let k = 0, u = 0;
   for (let j = 0; j < s; j++) for (let i = 0; i < s; i++) {
-    const ii = Math.min(n, Math.max(0, i - 1)), jj = Math.min(n, Math.max(0, j - 1));
+    const hi = Math.min(n, Math.max(0, i - 1)) + 1, hj = Math.min(n, Math.max(0, j - 1)) + 1;
     const skirt = i === 0 || j === 0 || i === s - 1 || j === s - 1;
-    const x = x0 + ii * step, z = z0 + jj * step;
-    const h = getHeight(x, z);
-    const hx = getHeight(x - e, z) - getHeight(x + e, z), hz = getHeight(x, z - e) - getHeight(x, z + e);
-    const nl = Math.hypot(hx, 2 * e, hz);
+    const x = x0 + (hi - 1) * step, z = z0 + (hj - 1) * step;
+    const h = H[hi + hj * s];
+    const hx = H[hi - 1 + hj * s] - H[hi + 1 + hj * s], hz = H[hi + (hj - 1) * s] - H[hi + (hj + 1) * s];
+    const nl = Math.hypot(hx, 2 * step, hz);
     pos[k] = x; pos[k + 1] = skirt ? h - (step * 3 + 6) : h; pos[k + 2] = z;
-    nor[k] = hx / nl; nor[k + 1] = (2 * e) / nl; nor[k + 2] = hz / nl;
-    const slope = Math.hypot(hx, hz) / (2 * e);
-    if (lod === 0 && edits.has(Math.round((x - MINX) / FC) + Math.round((z - MINZ) / FC) * FW)) { col[k] = DIRT[0]; col[k + 1] = DIRT[1]; col[k + 2] = DIRT[2]; }
+    nor[k] = hx / nl; nor[k + 1] = (2 * step) / nl; nor[k + 2] = hz / nl;
+    const slope = Math.hypot(hx, hz) / (2 * step);
+    if (step < 5 && edits.has(Math.round((x - MINX) / FC) + Math.round((z - MINZ) / FC) * FW)) { col[k] = DIRT[0]; col[k + 1] = DIRT[1]; col[k + 2] = DIRT[2]; }
     else { colorAt(x, z, h, slope, _c); col[k] = _c[0]; col[k + 1] = _c[1]; col[k + 2] = _c[2]; }
     uv[u++] = x / 9; uv[u++] = z / 9;
     k += 3;
@@ -264,10 +269,10 @@ function sinkCoarse(ctx, ctz, R) {
   coarse.geometry.attributes.position.needsUpdate = true;
 }
 
-export const R = { l0: 1, l1: 4, l2: 9 };
-export function initTerrain(sc, lowGfx) {
+export const R = { l0: 1, l1: 4, l2: 7 };
+export function initTerrain(sc, gfx) {
   scene = sc;
-  if (lowGfx) { R.l0 = 0; R.l1 = 3; R.l2 = 6; }
+  if (gfx === 'low') { R.l0 = 0; R.l1 = 2; R.l2 = 5; } else if (gfx === 'mid') { R.l0 = 1; R.l1 = 3; R.l2 = 6; }
   mat = new THREE.MeshLambertMaterial({ vertexColors: true, map: tex('ground') });
   buildCoarse();
 }

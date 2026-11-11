@@ -62,8 +62,8 @@ function updateSpots(dt, ready) {
   const me = G.me;
   for (const sp of npcSpots) {
     const d = Math.hypot(sp.x - me.pos.x, sp.z - me.pos.z) - sp.r;
-    if (d < 230 && !sp.list && ready && G.npcs.length < 90) spawnSpot(sp);
-    else if (d > 330 && sp.list) despawnSpot(sp);
+    if (d < 190 && !sp.list && ready && G.npcs.length < 55) spawnSpot(sp);
+    else if (d > 280 && sp.list) despawnSpot(sp);
   }
 }
 
@@ -105,7 +105,7 @@ export function updateNpcs(dt, ready = true) {
   const night = G.daylight < 0.2;
   for (const n of G.npcs) {
     const pd = Math.hypot(n.pos.x - me.pos.x, n.pos.z - me.pos.z);
-    const vis = pd < 240 && !(night && (n.kind === 'wander' || n.kind === 'arbeit'));
+    const vis = pd < 180 && !(night && (n.kind === 'wander' || n.kind === 'arbeit'));
     if (vis !== n.visible) { n.visible = vis; n.av.group.visible = vis; }
     if (n.state === 'down') { n.t -= dt; if (n.t <= 0) { n.state = 'idle'; n.t = 2; } }
     if (!vis) continue;

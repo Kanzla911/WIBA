@@ -5,6 +5,8 @@ const assert = require('assert');
 const http = require('http');
 const WebSocket = require('ws');
 const { startServer } = require('../server');
+const fs = require('fs');
+const path = require('path');
 
 function client(port, name) {
   return new Promise((resolve, reject) => {
@@ -41,6 +43,11 @@ function get(port, path) {
     assert.strictEqual((await get(srv.port, '/../server.js')).status, 403);
     assert.strictEqual((await get(srv.port, '/gibtsnicht.js')).status, 404);
 
+    // Routenplaner (nur mit echter Karte)
+    if (fs.existsSync(path.join(__dirname, '..', 'public', 'world', 'meta.json'))) {
+      const r = JSON.parse((await get(srv.port, '/route?ax=-90&az=-140&bx=-4700&bz=6600')).body);
+      assert.ok(r.pts && r.pts.length > 20 && r.dist > 5000 && r.time > 60, 'Route Voecklabruck -> Kammer');
+    }
     const a = await client(srv.port, 'Sepp');
     const b = await client(srv.port, 'Franz');
     assert.ok(a.welcome.vehicles.length >= 10, 'Fahrzeuge vorhanden');

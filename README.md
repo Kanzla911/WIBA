@@ -7,6 +7,9 @@ Flieger und Kampfjets fliegen, im Wirtshaus versumpern – und nebenbei die Bana
 
 ## Spielen
 
+**Welche Datei?** `WIBA.exe` für normale Windows-PCs (Intel/AMD), `WIBA-ARM64.exe` für Windows-Geräte mit ARM-Chip (z. B. Snapdragon), `WIBA-Mac-AppleSilicon.zip` / `WIBA-Mac-Intel.zip` für Macs.
+Das Spiel passt Auflösung und Effekte automatisch an, damit es flüssig läuft; `F3` zeigt die FPS.
+
 1. **WIBA.exe** herunterladen: [aktuelle Version](../../releases/latest/download/WIBA.exe)
    (oder unter *Releases* / *Actions* im Repository).
 2. Doppelklick. Keine Installation nötig.
@@ -36,6 +39,8 @@ Die Welt ist die **echte Region Vöcklabruck – Attersee – Höllengebirge im 
 - **Straßen, Wege, Bahn, Brücken, Flüsse, Seen, Wälder, Felder** nach echten Daten.
 - **Orte, Wirtshäuser, Werkstätten, Läden, Tankstellen, Gipfel, Sehenswürdigkeiten** als Punkte in der Welt und auf der Karte.
 - Du startest am Stadtplatz Vöcklabruck. Zum Attersee sind es wie in echt rund 9 km – nimm ein Auto.
+
+**Navi wie in GTA:** Auf der großen Karte (`M`) ein Ziel anklicken – das Spiel berechnet die schnellste Route über die echten Straßen und zeigt sie violett auf Karte, Minimap und Straße, mit Restkilometern und Fahrzeit. Fährst du falsch, wird neu berechnet.
 
 **Karte:** Die Minimap zeigt die Umgebung. `M` öffnet die große Karte: ziehen, zoomen, Klick setzt einen Wegpunkt.
 Dort siehst du Orte, Wirtshäuser, Läden, Fahrzeuge und alle Mitspieler.

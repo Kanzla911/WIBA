@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { G, net, clamp, invAdd, invCount } from './state.js';
 import { ITEMS, WEAPONS, PROJ, PLAYER_COLORS, DAY_LENGTH } from './config.js';
 import { M, loadWorld, applyAirfield, initTerrain, updateTerrain, getHeight, applyEdits, flushTerrain, raycastTerrain, isProtected, waterLevelAt, inWorld, landuseAt } from './terrain.js';
-import { initWorld, updateSky, boxes, pois, textSprite, mkBox, polyAt, surfaceAt, updateObjects, updateMarkers, updateGrass } from './world.js';
+import { initWorld, updateSky, boxes, pois, textSprite, mkBox, polyAt, surfaceAt, updateObjects, updateMarkers, updateGrass, setGrassLimit } from './world.js';
 import { makeAvatar, makeItem } from './models.js';
 import { initAudio, sfx, engine, ambient } from './audio.js';
 import * as UI from './ui.js';
@@ -12,6 +12,7 @@ import * as V from './vehicles.js';
 import { initNpcs, updateNpcs } from './npc.js';
 import { radio } from './radio.js';
 import * as P2P from './p2p.js';
+import { updateNav } from './navi.js';
 import { EffectComposer } from '../vendor/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from '../vendor/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from '../vendor/jsm/postprocessing/UnrealBloomPass.js';
@@ -29,7 +30,10 @@ try { gfx = localStorage.getItem('wiba-gfx') || 'high'; } catch (e) { /* */ }
 if (gfx !== 'low' && gfx !== 'mid') gfx = 'high';
 const lowGfx = gfx === 'low';
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !lowGfx, powerPreference: 'high-performance' });
-renderer.setPixelRatio(lowGfx ? 0.8 : Math.min(window.devicePixelRatio || 1, gfx === 'mid' ? 1.25 : 2));
+// Aufloesung: hoechstens Bildschirmpunkt = Pixel; wird bei Ruckeln automatisch gesenkt
+const PR_MAX = gfx === 'low' ? 0.85 : (gfx === 'mid' ? 1 : Math.min(window.devicePixelRatio || 1, 1.25)), PR_MIN = 0.5;
+let pixelRatio = PR_MAX;
+renderer.setPixelRatio(pixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = !lowGfx;
 renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -41,7 +45,7 @@ camera.rotation.order = 'YXZ';
 scene.add(camera);
 G.scene = scene; G.camera = camera; G.renderer = renderer; G.canvas = canvas;
 // Nachbearbeitung (nur hohe Grafik): Umgebungsverdeckung + Leuchten
-let composer = null, aoPass = null;
+let composer = null, aoPass = null, bloomPass = null;
 let gfxAO = true;
 try { gfxAO = localStorage.getItem('wiba-ao') !== 'off'; } catch (e) { /* */ }
 function initPost() {
@@ -56,7 +60,8 @@ function initPost() {
       aoPass.updateGtaoMaterial({ radius: 1.6, distanceExponent: 1.6, thickness: 1.4, scale: 1.1, samples: 12, distanceFallOff: 1, screenSpaceRadius: false });
       composer.addPass(aoPass);
     }
-    composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.2, 0.55, 0.94));
+    bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0.2, 0.55, 0.94);
+    composer.addPass(bloomPass);
     composer.addPass(new OutputPass());
   } catch (e) { composer = null; console.warn('Nachbearbeitung nicht verfügbar', e); }
 }
@@ -283,8 +288,8 @@ net.on('welcome', (m) => {
   me.id = m.id;
   G.serverTimeOffset = m.time - performance.now() / 1000;
   applyAirfield(m.air || null);
-  initTerrain(scene, lowGfx);
-  initWorld(scene, lowGfx, renderer);
+  initTerrain(scene, gfx);
+  initWorld(scene, gfx, renderer);
   initPost();
   applyEdits(m.digs);
   for (const s of m.structs) C.addStruct(s);
@@ -428,6 +433,7 @@ document.addEventListener('keydown', (e) => {
   if (!G.started) return;
   const code = e.code;
   if (code === 'F1') { $('help').classList.toggle('hidden'); e.preventDefault(); return; }
+  if (code === 'F3') { perf.show = !perf.show; $('fps').classList.toggle('hidden', !perf.show); e.preventDefault(); return; }
   if (code === 'Tab') { e.preventDefault(); UI.showScore(true); return; }
   if (code === 'Escape') { if (G.menu === 'map') UI.toggleMap(); else if (G.menu) UI.closeMenu(); $('help').classList.add('hidden'); return; }
   if (code === 'Enter') { e.preventDefault(); if (!G.menu) openChat(); return; }
@@ -781,9 +787,36 @@ function updateInteraction(dt, ctl) {
 
 // ---------- Hauptschleife ----------
 let last = performance.now(), sendT = 0, ambT = 0;
+// ---------- Bildraten-Regler: haelt das Spiel fluessig (ARM, Laptop, Gaming-PC) ----------
+const perf = { t: 0, n: 0, fps: 60, slow: 0, step: 0, show: false };
+function setPixelRatio(v) {
+  pixelRatio = Math.max(PR_MIN, Math.min(PR_MAX, v));
+  renderer.setPixelRatio(pixelRatio);
+  if (composer) composer.setPixelRatio(pixelRatio);
+}
+function perfTick(rawDt) {
+  if (!G.started || G.spawnPending || document.hidden) return;
+  perf.t += rawDt; perf.n++;
+  if (perf.t < 1.5) return;
+  perf.fps = perf.n / perf.t; perf.t = 0; perf.n = 0;
+  if (perf.fps < 48) {
+    if (pixelRatio > PR_MIN + 0.01) setPixelRatio(pixelRatio * 0.86);
+    else if (++perf.slow >= 2) {
+      perf.slow = 0; perf.step++;
+      if (perf.step === 1 && aoPass) aoPass.enabled = false;
+      else if (perf.step === 2) setGrassLimit(5000);
+      else if (perf.step === 3 && bloomPass) bloomPass.enabled = false;
+      else if (perf.step === 4) setGrassLimit(0);
+      else if (perf.step === 5 && composer) composer = null;
+    }
+  } else if (perf.fps > 57 && pixelRatio < PR_MAX - 0.01) { perf.slow = 0; setPixelRatio(pixelRatio * 1.06); }
+  if (perf.show) $('fps').textContent = `${Math.round(perf.fps)} FPS · Auflösung ${Math.round(pixelRatio * 100)}% · Stufe ${perf.step}`;
+}
 function frame(now) {
   requestAnimationFrame(frame);
-  const dt = Math.min(0.05, Math.max(0.001, (now - last) / 1000));
+  const rawDt = Math.max(0.001, (now - last) / 1000);
+  perfTick(rawDt);
+  const dt = Math.min(0.05, rawDt);
   last = now;
   if (!G.started) return;
   G.time += dt;
@@ -845,6 +878,7 @@ function frame(now) {
   updateMarkers(sx, sz, dt);
   updateGrass(sx, sz, camera.position.y - getHeight(camera.position.x, camera.position.z), !pend && !G.spawnPending);
   updateNpcs(dt, !pend);
+  updateNav(dt);
   const st = G.serverTimeOffset + now / 1000;
   G.dayT = ((st / DAY_LENGTH) + 0.36) % 1;
   G.daylight = updateSky(G.dayT, dt, me.pos, scene);

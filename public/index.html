@@ -63,6 +63,7 @@
   #wibabar { position: absolute; left: 50%; top: 68%; transform: translateX(-50%); width: 260px; text-align: center; font-size: 13px; text-shadow: 0 1px 2px #000; }
   #wibabar .bar > div { background: linear-gradient(#ffe45a, #f2b90f); transition: none; }
   #radio { position: absolute; right: 14px; top: 14px; background: var(--p); padding: 5px 11px; border-radius: 8px; font-size: 12px; }
+  #fps { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); background: var(--p); padding: 3px 10px; border-radius: 6px; font-size: 12px; font-family: monospace; }
   #code { position: absolute; right: 14px; top: 46px; background: rgba(70,60,10,.9); border: 1px solid var(--y); color: #fff; padding: 6px 12px; border-radius: 8px; font-size: 14px; font-weight: bold; user-select: text; letter-spacing: .5px; }
   #feed { position: absolute; right: 14px; top: 84px; text-align: right; font-size: 14px; }
   #feed div { background: var(--p); padding: 4px 10px; border-radius: 7px; margin-bottom: 4px; display: inline-block; clear: both; float: right; }
@@ -126,6 +127,7 @@
   <div id="chatlog"></div>
   <input id="chatinput" class="hidden" type="text" maxlength="160" placeholder="Nachricht… (Enter = senden)">
   <div id="radio"></div>
+  <div id="fps" class="hidden">… FPS</div>
   <div id="code" class="hidden"></div>
   <div id="feed"></div>
   <div id="toasts"></div>
@@ -184,7 +186,7 @@
       Möglichst wenig tun. WIBA-Punkte gibt’s fürs Banane-Wichsen (auf Hochglanz polieren, eh klar) und fürs Im-Bagger-Sitzen.
       Die Welt ist die echte Region im Maßstab 1:1 – von Vöcklabruck an den Attersee, auf den Gahberg, ins Weißenbachtal. Erz graben, Waffen schmieden, Bunker bauen, andere ärgern.
       <h4>Sonstiges</h4>
-      <kbd>F1</kbd> Hilfe · <kbd>F11</kbd> Vollbild · <kbd>ESC</kbd> Maus freigeben
+      <kbd>F1</kbd> Hilfe · <kbd>F3</kbd> FPS-Anzeige · <kbd>F11</kbd> Vollbild · <kbd>ESC</kbd> Maus freigeben
     </div>
   </div>
 </div>

@@ -4,6 +4,13 @@ const { app, BrowserWindow, Menu, shell } = require('electron');
 const path = require('path');
 const { startServer } = require('./server');
 
+// Grafikkarte voll nutzen (auch auf Laptops mit zwei GPUs und auf ARM-Geraeten)
+app.commandLine.appendSwitch('ignore-gpu-blocklist');
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('force_high_performance_gpu');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+
 let win = null;
 let srv = null;
 
